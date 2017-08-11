@@ -5,18 +5,13 @@ function [ output_args ] = csRunAnalysis( cellList )
 	[~, savePath]=uiputfile('output.mat', 'Select output path');
 
 	evalin('base', 'global newCell csAllCells csAllCellsLabels');
-	global csTableRaw csTableSize newCell csAllCells csAllCellsLabels
+	global csTableRaw csTableSize newCell 
 
+	newCell=[];
 
 	if nargin<1 || isempty(cellList)
 		cellList=1:csTableSize(2)-1;
 	end
-	
-	csAllCellsLabels={'CellID', 'ML', 'DV', 'Injection', 'Vrest', 'Cm', ...
-		'Rm', 'Tau', 'F100', 'F200', 'V100', 'V200', 'firstAPwidth', 'firstAPthresh', 'firstAPdvdt',  'firstAPAHP', ...
-		'sag', 'rebound', 'VrestSD', 'pulseI', 'pulseV', 'pulseAP', ...
-		'pulseAHP', 'reboundAP', 'reboundV'};
-	csAllCells=cell(max(cellList), length(csAllCellsLabels));
 	
 	if ~isnumeric(savePath) && ~isempty(savePath)
 		save(fullfile(savePath, 'rawData.mat'), 'csTableRaw', 'csTableSize');
@@ -29,32 +24,30 @@ function [ output_args ] = csRunAnalysis( cellList )
 	ind=[];
 	
 	for counter=1:length(csTableRaw(1,:))
-		if ~isempty(csTableRaw{1,counter})
-			ind.(csTableRaw{1,counter})=counter;
+		if ~isempty(csTableRaw{1,counter}) & ~isnan(csTableRaw{1,counter})
+			ind.(matlab.lang.makeValidName(csTableRaw{1,counter}))=counter;
 		end
 	end
 	
 %% set up the variables to process data
 
-	pulseStart=1000; % where is optogenetic pulse
-	pulseEnd=1003;
-	anaStart=1000; % where will we analyze post-synaptic currents
-	anaEnd=1010; 
+	pulseStart=500; % where is optogenetic pulse
+	pulseEnd=pulseStart+3;
+	anaStart=pulseStart; % where will we analyze post-synaptic currents
+	anaEnd=pulseStart+10; 
+	chargeAnaEnd=pulseStart+30;
 	anaPeakPre=1;
 	anaPeakPost=2;
-	fakeShift=-20; % how will be shift the analysis window for fake data
+	fakeShift=-50; % how will be shift the analysis window for fake data
 	
 	checkPulseSize=-5;
 	checkPulseStart=2500;
 	checkPulseEnd=2550;
 %	prepath='/Users/Bernardo/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/fig1analysisCellCharic/';
-	prepath='/Volumes/BS Office/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/3.fig2analysisConnec.example/';
+%	prepath='/Volumes/BS Office/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/3.fig2analysisConnec.example/';
+	prepath='/Volumes/BS Office/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/5.fig6analysisConnec1.example/D1vsD2/';
 %	prepath='/Volumes/BS Office/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/fig2analysisCellCharic/';
 
-	% column order assumptions
-	% new % 'Date' 'Animal' 'CellN' 'Rin' 'Cm' 'Epoch' 'EpochEnd'
-	%	'SweepStart' 'SweepEnd' 'ML' 'DV' 'amp' 'Injection ' 'Notes'
-	%	'currentpulses' 'currentpulseID'
 	
 
 %% nested function to return a subrange of the data 
@@ -140,15 +133,7 @@ for cellCounter=cellList
 	newCell.stepCm=nan(1, nAcq);
     newCell.stepRs=nan(1, nAcq);
     newCell.stepRm=nan(1, nAcq);
- 
-	newCell.pulseI=nan(1, nAcq);
-    newCell.pulseRm=nan(1, nAcq);
-    newCell.pulseV=nan(1, nAcq);
-    newCell.pulseAP=nan(1, nAcq);   
-	newCell.pulseSagV=nan(1, nAcq);
-	
-	newCell.reboundV=nan(1, nAcq);
-	newCell.reboundAP=nan(1,nAcq);
+    newCell.stepRt=nan(1, nAcq);
 		
 		
 %% run through the acquisitions and calculate passive parameters
@@ -190,82 +175,158 @@ for cellCounter=cellList
 			newCell.stepCm(sCounter)] = ...
 			csAnalyzeRC(SR(checkPulseStart,checkPulseEnd)-newCell.restMean(sCounter), ...
 			checkPulseSize, acqRate);
-
-	
-		newCell.pscPeakBL(sCounter)=mean(SR(anaStart-fakeShift,...
-			anaEnd-fakeShift));	
-		[pk, indp]=min(SR(anaStart, anaEnd));
-		newCell.pscPeak(sCounter)=pk-newCell.pscPeakBL(sCounter);
-		xStart=(indp-1)/acqRate+anaStart;
-		newCell.pscPeriPeak(sCounter)=mean(SR(xStart+anaPeakPre, ...
-			xStart+anaPeakPost)) - newCell.pscPeakBL(sCounter);
-
-		newCell.pscFakePeakBL(sCounter)=mean(SR(anaStart-2*fakeShift,...
-			anaEnd-2*fakeShift));
-		[pk, indp]=min(...
-			SR(anaStart-fakeShift, anaEnd-fakeShift));
-		newCell.pscFakePeak(sCounter)=pk-newCell.pscFakePeakBL(sCounter);
-		xStart=(indp-1)/acqRate+anaStart-fakeShift;
-		newCell.pscPeriFakePeak(sCounter)=mean(SR(xStart+anaPeakPre, ...
-			xStart+anaPeakPost)) - newCell.pscFakePeakBL(sCounter);
-
-		newCell.pscCharge(sCounter)=(anaEnd-anaStart)*...
-			(mean(SR(anaStart, anaEnd))-newCell.pscPeakBL(sCounter));
-		newCell.pscFakeCharge(sCounter)=(anaEnd-anaStart)*...
-			(mean(SR(anaStart-fakeShift, anaEnd-fakeShift))...
-			-newCell.pscFakePeakBL(sCounter));	
-	
-	end
+	    newCell.stepRt(sCounter)=newCell.stepRm(sCounter)+newCell.stepRs(sCounter);
 		
+	end
+			
 	avgRest=median(nonNan(newCell.restMean));
 	avgStepRm=median(nonNan(newCell.stepRm));
 	avgStepRs=median(nonNan(newCell.stepRs));
 	avgStepCm=median(nonNan(newCell.stepCm));
 
 
-	
+		
 	% We'll set some QC based on holding current and how it changes
-% 	hiV_cutoff=-50; 
-% 	loV=avgVm-5;
-% 	hiV=min(avgVm+5, hiV_cutoff);
-% 	
-% 	loR=avgStepRmE*0.9;
-% 	hiR=avgStepRmE*1.1;
-% 
-% 	newCell.traceQC=...
-% 		within(newCell.restMean, loV, hiV) & ...
-% 		within(newCell.stepRm, loR, hiR) & ...
-% 		within(newCell.restMax-newCell.restMin, 0, 5) & ...
-% 		within(newCell.restSD, 0, 2)...
-% 		;
+ 	hiRest=300; 
+ 	loRest=-300;
+
+	deltaR=0.15;
+%  	loR=avgStepRm*(1-deltaR);
+%  	hiR=avgStepRm*(1+deltaR);
+ 	loR=100;
+ 	hiR=500;
+
+ 
+ 	newCell.traceQC=...
+ 		within(newCell.restMean, loRest, hiRest) & ...
+ 		within(newCell.stepRs, 0, 30) & ...
+ 		within(newCell.stepRm, loR, hiR) & ...
+ 		within(newCell.restMax-newCell.restMin, 0, 100) & ...
+ 		within(newCell.restSD, 0, 10)...
+ 		;
+
+
+ 	for sCounter=1:nAcq
+		acqData=newCell.acq{sCounter}.data;	
 	
-%% plot of the traces that survive QC
-    fFig=figure('name', [newCell.mouseID ' ' newCell.cellID]);
+		newCell.pscPeakBL(sCounter)=mean(SR(anaStart+fakeShift,...
+			anaEnd+fakeShift));	
+		[pk, indp]=min(SR(anaStart, anaEnd));
+		newCell.pscPeak(sCounter)=pk-newCell.pscPeakBL(sCounter);
+		xStart=(indp-1)/acqRate+anaStart;
+		newCell.pscPeriPeak(sCounter)=mean(SR(xStart+anaPeakPre, ...
+			xStart+anaPeakPost)) - newCell.pscPeakBL(sCounter);
+
+		newCell.pscFakePeakBL(sCounter)=mean(SR(anaStart+2*fakeShift,...
+			anaEnd+2*fakeShift));
+		[pk, indp]=min(...
+			SR(anaStart+fakeShift, anaEnd+fakeShift));
+		newCell.pscFakePeak(sCounter)=pk-newCell.pscFakePeakBL(sCounter);
+		xStart=(indp-1)/acqRate+anaStart+fakeShift;
+		newCell.pscPeriFakePeak(sCounter)=mean(SR(xStart+anaPeakPre, ...
+			xStart+anaPeakPost)) - newCell.pscFakePeakBL(sCounter);
+
+		newCell.pscCharge(sCounter)=(chargeAnaEnd-anaStart)*...
+			(mean(SR(anaStart, chargeAnaEnd))-newCell.pscPeakBL(sCounter));
+		newCell.pscFakeCharge(sCounter)=(chargeAnaEnd-anaStart)*...
+			(mean(SR(anaStart+fakeShift, chargeAnaEnd+fakeShift))...
+			-newCell.pscFakePeakBL(sCounter));	
+	
+	end
+
+
+	
+%% do some summary analysis
+	goodTraces=find(newCell.traceQC);	
+	badTraces=find(~newCell.traceQC);	
+	
+	nGood=length(goodTraces);
+	if nGood>nAcq/2
+		newCell.QC=1;
+	else
+		newCell.QC=0;
+	end
+	
+	% calculate the average
+	avgData=[];
+	for sCounter=goodTraces
+		acqData=newCell.acq{sCounter}.data;
+		if isempty(avgData)
+			avgData=acqData/nGood;
+		else
+			avgData=avgData+acqData/nGood;
+		end
+	end
+	
+
+
+
+%% extract PSC peaks based on where the peak of the average trace is
+	acqData=avgData; % load up the data
+	
+	if ~isempty(avgData)
+		newCell.avgData=avgData;
+		newCell.avgRestMean=mean(newCell.restMean);
+
+		[newCell.avgStepRs, ...
+			newCell.avgStepRm, ...
+			newCell.avgStepCm] = ...
+			csAnalyzeRC(SR(checkPulseStart,checkPulseEnd)-newCell.avgRestMean, ...
+			checkPulseSize, acqRate);
+
+		[~, indp]=min(SR(anaStart, anaEnd));
+		xStart=(indp-1)/acqRate+anaStart;
+
+		[~, indp]=min(...
+				SR(anaStart+fakeShift, anaEnd+fakeShift));
+		xStartFake=(indp-1)/acqRate+anaStart+fakeShift;
+
+		for sCounter=1:nAcq
+			acqData=newCell.acq{sCounter}.data;
+			newCell.pscPeriAvgPeak(sCounter)=mean(SR(xStart+anaPeakPre, ...
+				xStart+anaPeakPost)) - newCell.pscPeakBL(sCounter);
+			newCell.pscPeriAvgFakePeak(sCounter)=mean(SR(xStartFake+anaPeakPre, ...
+				xStartFake+anaPeakPost)) - newCell.pscFakePeakBL(sCounter);		
+		end
+
+	else
+		newCell.avgRestMean=nan;
+		newCell.avgStepRs=nan;
+		newCell.avgStepRm=nan;
+		newCell.avgStepCm=nan;
+		newCell.QC=0;
+		newCell.pscPeriAvgPeak(1:nAcq)=NaN;
+		newCell.pscPeriAvgFakePeak(1:nAcq)=NaN;
+	end
+	
+
+	
+%% plot data
+	newName=[newCell.mouseID '_' num2str(newCell.cellID)];
+	disp(['plotting ' newName]);
+    fFig=figure('name', newName);
 	hold on
 
 %% plot the rejected traces
-	notGoodTraces=find(~newCell.traceQC);
 	a1n=subplot(5,   3, [1:3]);
 	title(a1n, 'Bad acquisitions');
 	xlabel('time (ms)') 
 	ylabel('I (pA)')
 	hold on	
-	for sCounter=notGoodTraces
+	for sCounter=badTraces
 		acqData=newCell.acq{sCounter}.data;
 		plot([0:acqEndPt]/acqRate, acqData);
 	end
-		
+
+
+%% plot the good traces	
 	a1=subplot(5,   3, [4:6]);
 	title(a1, ['Good acquisitions']);
 	xlabel('time (ms)') 
 	ylabel('I (pA)')
 	hold on
 	
-	goodTraces=find(newCell.traceQC);	
-	badTraces=find(~newCell.traceQC);	
-
-	denom=nAcq;
-		
+	denom=nAcq;	
 	nGood=length(goodTraces);
 
 	avgData=[];
@@ -278,12 +339,6 @@ for cellCounter=cellList
 	for sCounter=goodTraces
 		acqData=newCell.acq{sCounter}.data;
 		plot([0:acqEndPt]/acqRate, acqData);
-
-		if isempty(avgData)
-			avgData=acqData/nGood;
-		else
-			avgData=avgData+acqData/nGood;
-		end
 	end
 	
 	% plot again with baselining
@@ -296,15 +351,9 @@ for cellCounter=cellList
 	for sCounter=goodTraces
 		acqData=newCell.acq{sCounter}.data-newCell.restMean(sCounter);
 		plot([0:acqEndPt]/acqRate, acqData);
-
-		if isempty(avgData)
-			avgData=acqData/nGood;
-		else
-			avgData=avgData+acqData/nGood;
-		end
 	end
 	set(a2, 'Ylim', [1.2*min(newCell.pscPeak) -1.2*min(newCell.pscPeak)]);
-	set(a2, 'Xlim', [anaStart+fakeShift anaEnd-fakeShift]);
+	set(a2, 'Xlim', [min(anaStart+fakeShift, anaEnd-fakeShift) max(anaStart+fakeShift, anaEnd-fakeShift)]);
 	
 	% plot cell params
 	a4rs=subplot(5,   3, 10);
@@ -328,8 +377,8 @@ for cellCounter=cellList
 	end
 	if ~isempty(badTraces)
 		plot(a4rs, badTraces,newCell.stepRs(badTraces), 'ro')
-		plot(a4rm, goodTraces,newCell.stepRm(badTraces), 'ro')
-		plot(a4im, goodTraces,newCell.restMean(badTraces), 'ro')
+		plot(a4rm, badTraces,newCell.stepRm(badTraces), 'ro')
+		plot(a4im, badTraces,newCell.restMean(badTraces), 'ro')
 	end
 	
 	
@@ -349,104 +398,48 @@ for cellCounter=cellList
 	hold on
 	if ~isempty(goodTraces)
 		plot(aPscPeak, goodTraces, newCell.pscPeak(goodTraces), 'go')
-		plot(aPeriPeak, goodTraces,newCell.pscPeriPeak(goodTraces), 'go')
+		plot(aPeriPeak, goodTraces,newCell.pscPeriAvgPeak(goodTraces), 'go')
 		plot(aCharge, goodTraces, newCell.pscCharge(goodTraces), 'go')
-		plot(aPscPeak, goodTraces, newCell.pscFakePeak(goodTraces), 'ro')
-		plot(aPeriPeak, goodTraces, newCell.pscPeriFakePeak(goodTraces), 'ro')
-		plot(aCharge, goodTraces, newCell.pscFakeCharge(goodTraces), 'ro')
-	end	
-	
-	
-	if ~isempty(avgData)
-		newCell.avgData=avgData;
-		newCell.avgRestMean=mean(newCell.restMean);
-
-		acqData=avgData;	
-		[newCell.avgStepRs, ...
-			newCell.avgStepRm, ...
-			newCell.avgStepCm] = ...
-			csAnalyzeRC(SR(checkPulseStart,checkPulseEnd)-newCell.avgRestMean, ...
-			checkPulseSize, acqRate);
-	else
-		newCell.avgRestMean=nan;
-		newCell.avgStepRs=nan;
-		newCell.avgStepRm=nan;
-		newCell.avgStepCm=nan;
-		newCell.QC=0;
-	end
-	
-	newName=[newCell.mouseID '_' newCell.cellID];
-	
+		plot(aPscPeak, goodTraces, newCell.pscFakePeak(goodTraces), 'bo')
+		plot(aPeriPeak, goodTraces, newCell.pscPeriAvgFakePeak(goodTraces), 'bo')
+		plot(aCharge, goodTraces, newCell.pscFakeCharge(goodTraces), 'bo')
+	end		
 
 %% Run through the good ones and extract data
+	evalin('base', [newName '_ana=newCell;'])
+% 
 
-% 	F100=nan;
-% 	F200=nan;
-% 	V100=nan;
-% 	V200=nan;
-% 	firstAPwidth=nan;
-% 	firstAPthresh=nan;
-% 	firstAPdvdt=nan;
-% 	firstAPAHP=nan;
-% 
-% 
-% 	newName=[newCell.mouseID '_' newCell.cellID];
-% 	
-% 	a2=subplot(3, 2, 5);
-% 	yyaxis left
-% 	scatter(newCell.pulseI(goodTraces), newCell.pulseV(goodTraces))
-% 	ylabel('V (mV)')
-% 	yyaxis right
-% 	scatter(newCell.pulseI(goodTraces), newCell.pulseAP(goodTraces))
-% 	title(a2, 'vs CURRENT')
-% 	ylabel('# AP')
-% 	xlabel('step (pA)') 
-% 
-% 	a3=subplot(3, 2, 6);
-% 	scatter(newCell.pulseV(goodTraces), newCell.pulseAP(goodTraces));
-% 	title(a3, 'vs VOLTAGE')
-% 	xlabel('V (mV)') 
-% 	ylabel('# AP')
-% 
-% 	csAllCells{cellCounter,1}=newName;
-% 	csAllCells{cellCounter,2}=newCell.ML;
-% 	csAllCells{cellCounter,3}=newCell.DV;
-% 	csAllCells{cellCounter,4}=newCell.injection;
-% 	csAllCells{cellCounter,5}=newCell.avgVrestMean;
-% 	csAllCells{cellCounter,6}=newCell.avgStepCm;
-% 	csAllCells{cellCounter,7}=newCell.avgStepRmF;
-% 	csAllCells{cellCounter,8}=newCell.avgStepTau;
-% 	csAllCells{cellCounter,9}=F100;
-% 	csAllCells{cellCounter,10}=F200;
-% 	csAllCells{cellCounter,11}=V100;
-% 	csAllCells{cellCounter,12}=V200;
-% 	csAllCells{cellCounter,13}=firstAPwidth;
-% 	csAllCells{cellCounter,14}=firstAPthresh;
-% 	csAllCells{cellCounter,15}=firstAPdvdt;
-% 	csAllCells{cellCounter,16}=firstAPAHP;
-% 	
-% 	if newCell.QC
-% 		csAllCells{cellCounter,17}=newCell.sagV;
-% 		csAllCells{cellCounter,18}=newCell.reboundV;
-% 		csAllCells{cellCounter,19}=newCell.VrestSD;
-% 		csAllCells{cellCounter,20}=newCell.pulseI;
-% 		csAllCells{cellCounter,21}=newCell.pulseV;
-% 		csAllCells{cellCounter,22}=newCell.pulseAP;
-% 		csAllCells{cellCounter,23}=newCell.pulseAHP;
-% 		csAllCells{cellCounter,24}=newCell.reboundAP;
-% 		csAllCells{cellCounter,25}=newCell.reboundV;
-% 	end
+	fieldsToKeep={'newName', ...
+		'newCell.ML', ...
+		'newCell.DV', ...
+		'newCell.avgRestMean', ...
+		'newCell.avgStepRm', ...
+		'newCell.avgStepRs', ...
+		'newCell.avgStepCm', ...
+		
+ 	csAllCells{cellCounter,1}=newName;
+ 	csAllCells{cellCounter,2}=newCell.ML;
+ 	csAllCells{cellCounter,3}=newCell.DV;
+ 	csAllCells{cellCounter,5}=newCell.avgRestMean;
+ 	csAllCells{cellCounter,6}=newCell.avgStepRm;
+ 	csAllCells{cellCounter,7}=newCell.avgStepRs;
+ 	csAllCells{cellCounter,8}=newCell.avgStepCm;
+	
+	allCp=sort(unique(newCell.cyclePosition));
+	for cpCounter=1:length(allCp)
+		cp=
+		
+	end
 	
 	if ~isempty(savePath)
-%		saveas(fFig, fullfile(savePath, [newName 'Fig.fig']));
-		print(fullfile(savePath, [newName 'FigPDF']),'-dpdf','-fillpage')
+		print(fullfile(savePath, [newName]),'-dpdf','-fillpage')
 		save(fullfile(savePath, [newName '.mat']), 'newCell');	
 	end
 end
 
-if ~isempty(savePath)
-	save(fullfile(savePath, 'csAllCells.mat'), 'csAllCells', 'csAllCellsLabels');	
-end
+% if ~isempty(savePath)
+% 	save(fullfile(savePath, 'csAllCells.mat'), 'csAllCells', 'csAllCellsLabels');	
+% end
 
 
 end

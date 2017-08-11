@@ -5,7 +5,10 @@ function [ output_args ] = csLoadExcel( input_args )
     evalin('base', 'global csTableNum csTableTxt csTableRaw csTableSize')
     global csTableNum csTableTxt csTableRaw csTableSize
 
-    
+ 	clear('csTableNum', 'csTableTxt', 'csTableRaw', 'csTableSize');
+	evalin('base', 'global csTableNum csTableTxt csTableRaw csTableSize')
+    global csTableNum csTableTxt csTableRaw csTableSize
+   
     [filename,pathname,~] = uigetfile('*.*','Select excel file with annotations');
     if isequal(filename,0)
         disp('User selected Cancel')

@@ -1,6 +1,7 @@
 function [rm, rs, cm] = csAnalyzeRC(dData, pulseSize, acqRate)
-%UNTITLED Summary of this function goes here
-%   Detailed explanation goes here
+%Returns cellular parameters meaures from voltage step in voltage calmp
+%   [rm, rs, cm] returns membrane resistance, series resistance, cell
+%		capacitance
 
 	nPnts=length(dData);
 	xx=1/acqRate*[0:(nPnts-1)];
