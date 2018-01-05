@@ -9,6 +9,9 @@ function [ output_args ] = csRunAnalysis( cellList )
 
 	newCell=[];
 
+	xFilename='test.xlsx';
+	dlmwrite(xFilename,{'test', 'tej'},'delimiter','');
+	
 	if nargin<1 || isempty(cellList)
 		cellList=1:csTableSize(2)-1;
 	end
@@ -24,7 +27,7 @@ function [ output_args ] = csRunAnalysis( cellList )
 	ind=[];
 	
 	for counter=1:length(csTableRaw(1,:))
-		if ~isempty(csTableRaw{1,counter}) & ~isnan(csTableRaw{1,counter})
+		if ~isempty(csTableRaw{1,counter}) && ~isnan(csTableRaw{1,counter})
 			ind.(matlab.lang.makeValidName(csTableRaw{1,counter}))=counter;
 		end
 	end
@@ -47,7 +50,7 @@ function [ output_args ] = csRunAnalysis( cellList )
 %	prepath='/Volumes/BS Office/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/3.fig2analysisConnec.example/';
 	prepath='/Volumes/BS Office/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/5.fig6analysisConnec1.example/D1vsD2/';
 %	prepath='/Volumes/BS Office/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/fig2analysisCellCharic/';
-
+	[~,prepath] = uiputfile('*.*','Select the path with the data folders', 'datapath.mat');
 	
 
 %% nested function to return a subrange of the data 
@@ -405,17 +408,20 @@ for cellCounter=cellList
 		plot(aCharge, goodTraces, newCell.pscFakeCharge(goodTraces), 'bo')
 	end		
 
+	
+	
+	
 %% Run through the good ones and extract data
 	evalin('base', [newName '_ana=newCell;'])
 % 
-
+ 
 	fieldsToKeep={'newName', ...
 		'newCell.ML', ...
 		'newCell.DV', ...
 		'newCell.avgRestMean', ...
 		'newCell.avgStepRm', ...
 		'newCell.avgStepRs', ...
-		'newCell.avgStepCm', ...
+		'newCell.avgStepCm'};
 		
  	csAllCells{cellCounter,1}=newName;
  	csAllCells{cellCounter,2}=newCell.ML;
@@ -427,7 +433,7 @@ for cellCounter=cellList
 	
 	allCp=sort(unique(newCell.cyclePosition));
 	for cpCounter=1:length(allCp)
-		cp=
+		
 		
 	end
 	
