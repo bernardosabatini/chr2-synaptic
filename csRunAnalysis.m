@@ -2,16 +2,17 @@ function [ output_args ] = csRunAnalysis( cellList )
 %UNTITLED Summary of this function goes here
 %   Detailed explanation goes here
 
+	[~,prepath] = uiputfile('*.*','Select the path with the data folders', 'datapath.mat');
 	[~, savePath]=uiputfile('output.mat', 'Select output path');
 
-	evalin('base', 'global newCell csAllCells csAllCellsLabels');
-	global csTableRaw csTableSize newCell 
+	evalin('base', 'global newCell csAllCells csTableOut');
+	global csTableRaw csTableSize newCell csTableOut
 
+    csTableOut=csTableRaw;
+
+    csAllCells=[];
 	newCell=[];
-
-	xFilename='test.xlsx';
-	dlmwrite(xFilename,{'test', 'tej'},'delimiter','');
-	
+    	
 	if nargin<1 || isempty(cellList)
 		cellList=1:csTableSize(2)-1;
 	end
@@ -22,20 +23,23 @@ function [ output_args ] = csRunAnalysis( cellList )
 		savePath=[];
 	end
 	
-	keepOnlyFirst=1;
-
 	ind=[];
 	
 	for counter=1:length(csTableRaw(1,:))
-		if ~isempty(csTableRaw{1,counter}) && ~isnan(csTableRaw{1,counter})
+		if ~isempty(csTableRaw{1,counter}) & ~isnan(csTableRaw{1,counter})
 			ind.(matlab.lang.makeValidName(csTableRaw{1,counter}))=counter;
 		end
-	end
+    end
+    
+    newCellFieldsToKeep={'acqNum', 'stepRs', 'stepRm', 'stepCm', 'restMean', ...
+        'pscPeak', 'pscPeriAvgPeak', 'pscCharge', ...
+        'pscFakePeak', 'pscPeriAvgFakePeak', 'pscFakeCharge'};
+    
+
 	
 %% set up the variables to process data
 
-	pulseStart=500; % where is optogenetic pulse
-	pulseEnd=pulseStart+3;
+	pulseStart=1000; % where is optogenetic pulse
 	anaStart=pulseStart; % where will we analyze post-synaptic currents
 	anaEnd=pulseStart+10; 
 	chargeAnaEnd=pulseStart+30;
@@ -46,12 +50,66 @@ function [ output_args ] = csRunAnalysis( cellList )
 	checkPulseSize=-5;
 	checkPulseStart=2500;
 	checkPulseEnd=2550;
-%	prepath='/Users/Bernardo/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/fig1analysisCellCharic/';
-%	prepath='/Volumes/BS Office/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/3.fig2analysisConnec.example/';
-	prepath='/Volumes/BS Office/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/5.fig6analysisConnec1.example/D1vsD2/';
-%	prepath='/Volumes/BS Office/Dropbox (HMS)/BernardoGilShare/(1)PFcircuitPaper/fig2analysisCellCharic/';
-	[~,prepath] = uiputfile('*.*','Select the path with the data folders', 'datapath.mat');
-	
+    
+    goodTracesToKeep=10;
+    blockLength=goodTracesToKeep+4;
+    colOffset=30;
+    rowCounter=1;
+    
+    insertToCell('cycleName', size(csTableRaw,2)+1, 1)
+    insertToCell('cyclePosition', size(csTableRaw,2)+2, 1)
+    insertToCell('count', size(csTableRaw,2)+3, 1)
+
+    for blockCounter=1:length(newCellFieldsToKeep)
+        offset=colOffset+blockLength*(blockCounter-1);
+        insertToCell(newCellFieldsToKeep{blockCounter},...
+            offset, 1, goodTracesToKeep);
+        insertToCell('Avg', offset+goodTracesToKeep, 1);
+        insertToCell('Std', offset+goodTracesToKeep+1, 1);
+    end
+   
+%% nested function to insert to cell
+    function insertToCell(val, col, row, repeats)
+        if nargin<3
+            row=rowCounter;
+        end
+        if nargin<4
+            repeats=1;
+        end
+        
+        if length(val)==1 || ischar(val)
+            if ~iscell(val)
+                val={val};
+            end
+            if repeats==1
+                csTableOut(row, col)=val;
+            else
+                csTableOut(row, col:col+repeats-1)=repmat(val, 1, repeats);
+            end
+        else
+            if isnumeric(val)
+                val=num2cell(val);
+            end
+            csTableOut(row, col:col+length(val)-1)=val;
+        end
+        
+    end
+
+%% nested function to insert into cell with avg and std
+    function insertToCellWithStats(val, block, row)
+        if nargin<3
+            row=rowCounter;
+        end
+        
+        offset=colOffset+blockLength*(block-1);
+        if length(val)>goodTracesToKeep
+            val=val(1:goodTracesToKeep);
+        end
+        
+        insertToCell(val, offset, row);
+        insertToCell(mean(val), offset+goodTracesToKeep, row);
+        insertToCell(std(val), offset+goodTracesToKeep+1, row);
+    end
 
 %% nested function to return a subrange of the data 
     function rang=SR(startS, endS)
@@ -196,8 +254,8 @@ for cellCounter=cellList
 	deltaR=0.15;
 %  	loR=avgStepRm*(1-deltaR);
 %  	hiR=avgStepRm*(1+deltaR);
- 	loR=100;
- 	hiR=500;
+ 	loR=50;
+ 	hiR=1000;
 
  
  	newCell.traceQC=...
@@ -409,43 +467,37 @@ for cellCounter=cellList
 	end		
 
 	
-	
-	
 %% Run through the good ones and extract data
-	evalin('base', [newName '_ana=newCell;'])
-% 
- 
-	fieldsToKeep={'newName', ...
-		'newCell.ML', ...
-		'newCell.DV', ...
-		'newCell.avgRestMean', ...
-		'newCell.avgStepRm', ...
-		'newCell.avgStepRs', ...
-		'newCell.avgStepCm'};
-		
- 	csAllCells{cellCounter,1}=newName;
- 	csAllCells{cellCounter,2}=newCell.ML;
- 	csAllCells{cellCounter,3}=newCell.DV;
- 	csAllCells{cellCounter,5}=newCell.avgRestMean;
- 	csAllCells{cellCounter,6}=newCell.avgStepRm;
- 	csAllCells{cellCounter,7}=newCell.avgStepRs;
- 	csAllCells{cellCounter,8}=newCell.avgStepCm;
-	
-	allCp=sort(unique(newCell.cyclePosition));
-	for cpCounter=1:length(allCp)
-		
-		
-	end
-	
+%	evalin('base', [newName '_ana=newCell;'])
+
+    insertToCell(newCell.cycleName{1}, size(csTableRaw,2)+1)
+    insertToCell(newCell.cyclePosition(1), size(csTableRaw,2)+2)
+    insertToCell(min(length(goodTraces), goodTracesToKeep),...
+        size(csTableRaw,2)+3)
+
+    for blockCounter=1:length(newCellFieldsToKeep)
+        field=newCellFieldsToKeep{blockCounter};
+        insertToCellWithStats(newCell.(field), blockCounter);
+    end
+    
 	if ~isempty(savePath)
 		print(fullfile(savePath, [newName]),'-dpdf','-fillpage')
 		save(fullfile(savePath, [newName '.mat']), 'newCell');	
-	end
+    end
+    if isempty(csAllCells)
+        csAllCells=newCell;
+    else
+        csAllCells(end+1)=newCell;
+    end
 end
 
-% if ~isempty(savePath)
-% 	save(fullfile(savePath, 'csAllCells.mat'), 'csAllCells', 'csAllCellsLabels');	
-% end
+T=cell2table(csTableOut);
+if ~isempty(savePath)
+ 	save(fullfile(savePath, 'csTableOut.mat'), 'csTableOut');	
+  	save(fullfile(savePath, 'csAllCells.mat'), 'csAllCells');	
+    writetable(T, fullfile(savePath, 'analysisTable.csv'));
+    writetable(T, fullfile(savePath, 'analysisTable.xlsx'));
+end
 
 
 end
