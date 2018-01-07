@@ -6,9 +6,9 @@ function [ output_args ] = csRunAnalysis( cellList )
 	[~, savePath]=uiputfile('output.mat', 'Select output path');
 
 	evalin('base', 'global newCell csAllCells csTableOut');
-	global csTableRaw csTableSize newCell csTableOut
+	global csTableRaw csTableSize newCell csTableOut csAllCells
 
-    csTableOut=csTableRaw;
+    csTableOut={};
 
     csAllCells=[];
 	newCell=[];
@@ -39,9 +39,9 @@ function [ output_args ] = csRunAnalysis( cellList )
 	
 %% set up the variables to process data
 
-	pulseStart=1000; % where is optogenetic pulse
+	pulseStart=500; % where is optogenetic pulse
 	anaStart=pulseStart; % where will we analyze post-synaptic currents
-	anaEnd=pulseStart+10; 
+	anaEnd=pulseStart+15; 
 	chargeAnaEnd=pulseStart+30;
 	anaPeakPre=1;
 	anaPeakPost=2;
@@ -55,10 +55,16 @@ function [ output_args ] = csRunAnalysis( cellList )
     blockLength=goodTracesToKeep+4;
     colOffset=30;
     rowCounter=1;
+    outputRowCounter=1;
+    nCol=min(size(csTableRaw,2), colOffset);
+    csTableOut(outputRowCounter, 1:nCol)=csTableRaw(rowCounter, 1:nCol);
+
     
     insertToCell('cycleName', size(csTableRaw,2)+1, 1)
     insertToCell('cyclePosition', size(csTableRaw,2)+2, 1)
-    insertToCell('count', size(csTableRaw,2)+3, 1)
+    insertToCell('good_count', size(csTableRaw,2)+3, 1)
+    insertToCell('bad_count', size(csTableRaw,2)+4, 1)
+    insertToCell('keep_count', size(csTableRaw,2)+5, 1)
 
     for blockCounter=1:length(newCellFieldsToKeep)
         offset=colOffset+blockLength*(blockCounter-1);
@@ -470,17 +476,43 @@ for cellCounter=cellList
 %% Run through the good ones and extract data
 %	evalin('base', [newName '_ana=newCell;'])
 
-    insertToCell(newCell.cycleName{1}, size(csTableRaw,2)+1)
-    insertToCell(newCell.cyclePosition(1), size(csTableRaw,2)+2)
-    insertToCell(min(length(goodTraces), goodTracesToKeep),...
-        size(csTableRaw,2)+3)
+    uniquePositions=sort(unique(newCell.cyclePosition));
+    for cPos=uniquePositions
+        outputRowCounter=outputRowCounter+1;
+        csTableOut(outputRowCounter, 1:nCol)=csTableRaw(rowCounter, 1:nCol);
 
-    for blockCounter=1:length(newCellFieldsToKeep)
-        field=newCellFieldsToKeep{blockCounter};
-        insertToCellWithStats(newCell.(field), blockCounter);
+        bCount=0;
+        gCount=0;
+        keepCount=0;
+        if ~isempty(badTraces)
+            bCount=length(find(newCell.cyclePosition(badTraces)==cPos));
+        end
+
+        fPos=find(newCell.cyclePosition==cPos);
+        insertToCell(newCell.cycleName{fPos(1)}, size(csTableRaw,2)+1, outputRowCounter)
+        insertToCell(cPos, size(csTableRaw,2)+2, outputRowCounter)
+       
+        if ~isempty(goodTraces)
+            gElements=goodTraces(newCell.cyclePosition(goodTraces)==cPos);
+            gCount=length(gElements);
+            if ~isempty(gElements)
+  
+                for blockCounter=1:length(newCellFieldsToKeep)
+                    field=newCellFieldsToKeep{blockCounter};
+                    insertToCellWithStats(newCell.(field)(gElements), blockCounter, outputRowCounter);
+                end
+            end
+        end
+        insertToCell(gCount,...
+                    size(csTableRaw,2)+3, outputRowCounter)
+        insertToCell(bCount,...
+                    size(csTableRaw,2)+4, outputRowCounter)
+        insertToCell(min(gCount, goodTracesToKeep),...
+                    size(csTableRaw,2)+5, outputRowCounter)
     end
     
-	if ~isempty(savePath)
+
+        if ~isempty(savePath)
 		print(fullfile(savePath, [newName]),'-dpdf','-fillpage')
 		save(fullfile(savePath, [newName '.mat']), 'newCell');	
     end
