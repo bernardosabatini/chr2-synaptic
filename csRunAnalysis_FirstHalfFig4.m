@@ -1,4 +1,4 @@
-function [ output_args ] = csRunAnalysis_SecondHalfFig4( cellList )
+function [ output_args ] = csRunAnalysis_Fig2_1000( cellList )
 %UNTITLED Summary of this function goes here
 %   Detailed explanation goes here
 
@@ -39,7 +39,7 @@ function [ output_args ] = csRunAnalysis_SecondHalfFig4( cellList )
 	
 %% set up the variables to process data
 
-	pulseStart=1000; % where is optogenetic pulse
+	pulseStart=500; % where is optogenetic pulse
 	anaStart=pulseStart; % where will we analyze post-synaptic currents
 	anaWindow=15;
 	anaEnd=anaStart+anaWindow; 
@@ -49,9 +49,9 @@ function [ output_args ] = csRunAnalysis_SecondHalfFig4( cellList )
 	fakeShift=-50; % how will be shift the analysis window for fake data
 	
 	checkPulseSize=-5;
-	checkPulseStart=150;
-	checkPulseEnd=200;
-
+	checkPulseStart=2500;
+	checkPulseEnd=2550;
+	
 	medianFilterSize=5;
     
     goodTracesToKeep=10;
@@ -235,7 +235,7 @@ for cellCounter=cellList
 		end
 
 		% define periods that are "baseline" and anylyze them 
-		notPulse=[SR(checkPulseEnd+50, pulseStart-10) SR(anaEnd+100, 1999)]; 
+		notPulse=[SR(1, pulseStart-10) SR(anaEnd+100, checkPulseStart-10)]; 
 		newCell.restMode(sCounter)=mode(round(notPulse));
 		newCell.restMean(sCounter)=mean(notPulse);
 		newCell.restMedian(sCounter)=median(notPulse);
