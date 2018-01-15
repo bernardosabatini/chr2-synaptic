@@ -63,7 +63,7 @@ function [ output_args ] = csRunAnalysis_Flex( cellList, varargin )
 	checkPulseEnd=2550;
 	
 	% values for QC inclusion of individual sweeps
-	maxRestSD=10;
+	maxRestSD=5;
 	maxRs=30;
  	maxRest=100; 
  	minRest=-300;

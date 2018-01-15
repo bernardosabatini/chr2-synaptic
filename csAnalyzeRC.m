@@ -18,10 +18,7 @@ function [rm, rs, cm] = csAnalyzeRC(dData, pulseSize, acqRate)
 	rmprs=1000*pulseSize/bl;
 	rm=rmprs-rs;
 	ppp=rs*rm/(rs+rm);
-	cm=tau/ppp;
-	
-	rmF=-ff.a/pulseSize*1000;
-	rmE=bl/pulseSize*1000;
-	cm=1000*tau/rmE;
+	cm=1000*tau/ppp;
+
 end
 
