@@ -44,9 +44,8 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 	end
     
 	% the fields that will go to the csv and xlsx tables at the end
-    newCellFieldsToKeep={'acqNum', 'stepRs', 'stepRm', 'stepCm', 'restMean', ...
-        'pscPeak', 'pscPeriAvgPeak', 'pscCharge', ...
-        'pscFakePeak', 'pscPeriAvgFakePeak', 'pscFakeCharge'};
+    newCellFieldsToKeep={'acqNum', 'restMean', 'pulseI', 'pulseV', 'pulseRm', ...
+		'nAP', 'sagV', 'reboundV', 'reboundAP'};
     
 	
 %% set up the variables to process data
@@ -63,13 +62,14 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 
 	% values for QC inclusion of individual sweeps
 	maxRestSD=5;
-	maxRs=30;
- 	maxRest=100; 
+ 	maxRest=-50; 
  	minRest=-300;
  	minRm=50;
  	maxRm=1000;
 	
-	medianFilterSize=5;
+	firstOnly=1;
+	
+	medianFilterSize=1;
 	
     goodTracesToKeep=10;
     blockLength=goodTracesToKeep+4;
@@ -206,6 +206,7 @@ for cellCounter=cellList
 	
 	newCell.QC=1; % assume passes QC
 	newCell.acqRate=0;
+	newCell.firstOnly=firstOnly;
 	
 	newCell.acq=cell(1,nAcq); % store the full object for that acq sweep
     
@@ -215,7 +216,8 @@ for cellCounter=cellList
     newCell.pulsePattern=nan(1, nAcq);
     newCell.extraGain=nan(1, nAcq);
 	newCell.pulseList=pulseList.(['p' num2str(newCell.CurrentPulseID)]);
-    
+    newCell.pulseListFirst=nan(1, length(newCell.pulseList));
+	
    	newCell.traceQC=ones(1, nAcq);
 
 	newCell.restMode=nan(1, nAcq);
@@ -224,13 +226,8 @@ for cellCounter=cellList
     newCell.restMin=nan(1, nAcq);
 	newCell.restSD=nan(1, nAcq);
 
-	newCell.stepCm=nan(1, nAcq);
-    newCell.stepRs=nan(1, nAcq);
-    newCell.stepRm=nan(1, nAcq);
-    newCell.stepRt=nan(1, nAcq);
-		
 	newCell.pulseRm=nan(1, nAcq);
-    newCell.Vstep=nan(1, nAcq);
+    newCell.pulseV=nan(1, nAcq);
     newCell.nAP=nan(1, nAcq);
     newCell.traceQC=ones(1, nAcq);
 	newCell.sagV=nan(1, nAcq);
@@ -253,8 +250,13 @@ for cellCounter=cellList
 			a=load(sFile);
 		end
         
-		a.(['AD0_' num2str(acqNum)]).data=...
-			medfilt1(a.(['AD0_' num2str(acqNum)]).data, medianFilterSize);
+		if medianFilterSize>1
+			a.(['AD0_' num2str(acqNum)]).data=...
+				medfilt1(a.(['AD0_' num2str(acqNum)]).data, medianFilterSize);
+		else
+			a.(['AD0_' num2str(acqNum)]).data=a.(['AD0_' num2str(acqNum)]).data;
+		end
+		
         newCell.acq{sCounter}=a.(['AD0_' num2str(acqNum)]);
         
         newCell.acqNum(sCounter)=acqNum;
@@ -266,7 +268,7 @@ for cellCounter=cellList
 
 		deltaI=newCell.pulseList(newCell.cyclePosition(sCounter))...
 			*newCell.extraGain(sCounter);
-		newCell.pulseSize(sCounter)=deltaI;
+		newCell.pulseI(sCounter)=deltaI;
 		
 		acqData=a.(['AD0_' num2str(acqNum)]).data;
 		if sCounter==1 % assume that the DAC sample rate doesn't change.
@@ -290,22 +292,19 @@ for cellCounter=cellList
 		newCell.restMin(sCounter)=min(notPulse);
 		newCell.restMax(sCounter)=max(notPulse);
 
-% 		[newCell.stepRm(sCounter), ...
-% 			newCell.stepRs(sCounter), ...
-% 			newCell.stepCm(sCounter)] = ...
-% 			csAnalyzeRC(SR(checkPulseStart,checkPulseEnd)-newCell.restMean(sCounter), ...
-% 			checkPulseSize, acqRate);
-% 	    newCell.stepRt(sCounter)=newCell.stepRm(sCounter)+newCell.stepRs(sCounter);
-		
+		% decide here reasons to reject a trace
+		if newCell.restMode(sCounter)>maxRest
+			newCell.traceQC(sCounter)=0;
+		else
+			ff=find(newCell.pulseList==deltaI);
+			if isnan(newCell.pulseListFirst(ff))
+				newCell.pulseListFirst(ff)=sCounter;
+			end
+		end
+			
+
 	end
 			
-	avgRest=median(nonNan(newCell.restMean));
-	avgStepRm=median(nonNan(newCell.stepRm));
-	avgStepRs=median(nonNan(newCell.stepRs));
-	avgStepCm=median(nonNan(newCell.stepCm));
-
-
-		
 	% We'll set some QC based on holding current and how it changes
 
 %	deltaR=0.25;
@@ -326,19 +325,25 @@ for cellCounter=cellList
 %  		within(newCell.restSD, 0, maxRestSD)...
 %  		;
 
-	avgData=[];
 
 %% Run through the traces and analyze the data	
-    for sCounter=1:nAcq
+
+	if firstOnly
+		acqToAna=sort(newCell.pulseListFirst(~isnan(newCell.pulseListFirst)));
+	else
+		acqToAna=1:nAcq;
+	end
+	
+    for sCounter=acqToAna
         acqData=newCell.acq{sCounter}.data;
         acqRate=headerValue('state.phys.settings.inputRate', 1)/1000; % points per ms
 
-		newCell.Vstep(sCounter)=mode(round(SR(pulseStart, pulseEnd)));
+		newCell.pulseV(sCounter)=mode(round(SR(pulseStart, pulseEnd)));
 
-		deltaI=newCell.pulseSize(sCounter);
+		deltaI=newCell.pulseI(sCounter);
   		if deltaI~=0
 	        newCell.pulseRm(sCounter)=1000*...       % Rm in MOhm
-	            (newCell.Vstep(sCounter)-newCell.restMean(sCounter))/deltaI;
+	            (newCell.pulseV(sCounter)-newCell.restMean(sCounter))/deltaI;
 			if deltaI<0
 				minHyp=min(SR(pulseStart, pulseEnd));
 				endHyp=mean(SR(pulseEnd-20,pulseEnd-1));
@@ -366,24 +371,7 @@ for cellCounter=cellList
 		end
 		newCell.pulseAHP(sCounter)=min(SR(pulseEnd+1, floor(length(acqData)/acqRate)))-...
 			newCell.restMean(sCounter);
-        
-		[newCell.stepTau(sCounter), ...
-			newCell.stepRmE(sCounter), ...
-			newCell.stepRmF(sCounter), ...
-			newCell.stepCm(sCounter)] = ...
-			ipAnalyzeRC(SR(checkPulseStart,checkPulseEnd)-newCell.restMean(sCounter), ...
-			checkPulseSize, acqRate);
 		
-		% decide here reasons to reject a trace
-		if newCell.restMode(sCounter)>-55
-			newCell.traceQC(sCounter)=0;
-		else
-			if isempty(avgData)
-				avgData=acqData;
-			else
-				avgData=avgData+acqData;
-			end
-		end
 	end
 
 
@@ -393,13 +381,6 @@ for cellCounter=cellList
 	badTraces=find(~newCell.traceQC);	
 	
 	nGood=length(goodTraces);
-	if nGood>nAcq/2
-		newCell.QC=1;
-	else
-		newCell.QC=0;
-	end
-	
-	
 
 	
 %% plot data
@@ -430,7 +411,6 @@ for cellCounter=cellList
 	denom=nAcq;	
 	nGood=length(goodTraces);
 
-	avgData=[];
 	if nGood>denom/2
 		newCell.QC=1;
 	else
@@ -442,35 +422,27 @@ for cellCounter=cellList
 		plot([0:acqEndPt]/acqRate, acqData);
 	end
 	
-	newName=[newCell.mouseID '_' newCell.cellID];
-	
-	% plot again with baselining
-	a2=subplot(5, 3, [7:9]);
-	title(a2, ['Good acquisitions BL']);
-	xlabel('time (ms)') 
-	ylabel('I (pA)')
-	hold on
 
-	for sCounter=goodTraces
-		acqData=newCell.acq{sCounter}.data-newCell.restMean(sCounter);
-		plot([0:acqEndPt]/acqRate, acqData);
-	end
-		
-	a2=subplot(2, 2, 3);
+%%		
+	a2=subplot(5, 3, 7);
 	yyaxis left
-	scatter(newCell.pulseSize(goodTraces), newCell.Vstep(goodTraces))
+	scatter(newCell.pulseI(goodTraces), newCell.pulseV(goodTraces))
+	set(gca, 'Ylim', [-100 0])
+	
 	ylabel('V (mV)')
 	yyaxis right
-	scatter(newCell.pulseSize(goodTraces), newCell.nAP(goodTraces))
+	scatter(newCell.pulseI(goodTraces), newCell.nAP(goodTraces))
 	title(a2, 'vs CURRENT')
 	ylabel('# AP')
 	xlabel('step (pA)') 
 
-	a3=subplot(2, 2, 4);
-	scatter(newCell.Vstep(goodTraces), newCell.nAP(goodTraces));
+	a3=subplot(5, 3, 8);
+	scatter(newCell.pulseV(goodTraces), newCell.nAP(goodTraces));
+	set(gca, 'Xlim', [-100 0])
 	title(a3, 'vs VOLTAGE')
 	xlabel('V (mV)') 
 	ylabel('# AP')
+	
 	if ~isempty(savePath)
 		saveas(fFig, fullfile(savePath, [newName 'Fig.fig']));
 		print(fullfile(savePath, [newName 'FigPDF']),'-dpdf','-fillpage')
