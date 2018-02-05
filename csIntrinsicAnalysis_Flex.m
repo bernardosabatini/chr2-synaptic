@@ -59,11 +59,12 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 	checkPulseSize=-50; % pA we are in current clamp
 	checkPulseStart=200;
 	checkPulseEnd=500;
+	usePulseListInExcel=0;
 
 	% values for QC inclusion of individual sweeps
 	maxRestSD=5;
- 	maxRest=-50; 
- 	minRest=-300;
+ 	maxRest=-30; 
+ 	minRest=-100;
  	minRm=50;
  	maxRm=1000;
 	
@@ -78,8 +79,14 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
     outputRowCounter=1;
 
 	for c=1:2:length(varargin)
-		disp(['Override: ' varargin{c} '=' num2str(varargin{c+1})]);
-		eval([varargin{c} '=' num2str(varargin{c+1}) ';']);
+		if isempty(varargin{c+1})
+			vStr='[]';
+		else
+			vStr=num2str(varargin{c+1});
+		end
+		
+		disp(['Override: ' varargin{c} '=' vStr]);
+		eval([varargin{c} '=' vStr ';']);
 	end
 	
     nCol=min(size(csTableRaw,2), colOffset);
@@ -215,7 +222,11 @@ for cellCounter=cellList
     newCell.cyclePosition=nan(1, nAcq);
     newCell.pulsePattern=nan(1, nAcq);
     newCell.extraGain=nan(1, nAcq);
-	newCell.pulseList=pulseList.(['p' num2str(newCell.CurrentPulseID)]);
+	if usePulseListInExcel
+		newCell.pulseList=str2num(newCell.CurrentPulse);		
+	else
+		newCell.pulseList=pulseList.(['p' num2str(newCell.CurrentPulseID)]);
+	end
     newCell.pulseListFirst=nan(1, length(newCell.pulseList));
 	
    	newCell.traceQC=ones(1, nAcq);
@@ -266,8 +277,13 @@ for cellCounter=cellList
         newCell.pulsePattern(sCounter)=headerValue('state.cycle.pulseToUse0', 1);
         newCell.extraGain(sCounter)=headerValue('state.phys.settings.extraGain0', 1);
 
-		deltaI=newCell.pulseList(newCell.cyclePosition(sCounter))...
-			*newCell.extraGain(sCounter);
+		if newCell.cyclePosition(sCounter)<=length(newCell.pulseList)
+			deltaI=newCell.pulseList(newCell.cyclePosition(sCounter))...
+				*newCell.extraGain(sCounter);
+		else
+			disp([sFile ' ' num2str(acqNum) ' error in cycle']);
+			deltaI=0;
+		end
 		newCell.pulseI(sCounter)=deltaI;
 		
 		acqData=a.(['AD0_' num2str(acqNum)]).data;
@@ -279,10 +295,14 @@ for cellCounter=cellList
 		end
 
 		% define periods that are "baseline" and anylyze them 
-		if checkPulseStart>pulseStart % the RC check comes late
-			notPulse=[SR(1, pulseStart-10) SR(pulseEnd+150, checkPulseStart-10)]; 
+		if isempty(checkPulseStart)
+			notPulse=[SR(1, pulseStart-10) SR(pulseEnd+150, acqLen-1)]; 
 		else
-			notPulse=[SR(checkPulseEnd+50, pulseStart-10) SR(pulseEnd+150, acqLen-1)]; 
+			if checkPulseStart>pulseStart % the RC check comes late
+				notPulse=[SR(1, pulseStart-10) SR(pulseEnd+150, checkPulseStart-10)]; 
+			else
+				notPulse=[SR(checkPulseEnd+50, pulseStart-10) SR(pulseEnd+150, acqLen-1)]; 
+			end
 		end
 		
 		newCell.restMode(sCounter)=mode(round(notPulse));
@@ -337,7 +357,7 @@ for cellCounter=cellList
     for sCounter=acqToAna
         acqData=newCell.acq{sCounter}.data;
         acqRate=headerValue('state.phys.settings.inputRate', 1)/1000; % points per ms
-
+		
 		newCell.pulseV(sCounter)=mode(round(SR(pulseStart, pulseEnd)));
 
 		deltaI=newCell.pulseI(sCounter);
@@ -352,10 +372,7 @@ for cellCounter=cellList
 					-newCell.restMean(sCounter);
 			end
 		end
-		
-		notPulse=[SR(1, checkPulseStart-1) SR(checkPulseEnd+20, pulseStart-10) SR(pulseEnd+100, 2999)];
-		newCell.noise(sCounter)=std(notPulse);
-		
+				
         newCell.pulseAP{sCounter}=ipAnalyzeAP(SR(pulseStart, pulseEnd));
 		if isempty(newCell.pulseAP{sCounter})
 			newCell.nAP(sCounter)=0;
@@ -390,19 +407,20 @@ for cellCounter=cellList
 	hold on
 
 %% plot the rejected traces
-	a1n=subplot(5,   3, [1:3]);
+	a1n=subplot(5,   3, [1:6]);
 	title(a1n, 'Bad acquisitions');
 	xlabel('time (ms)') 
 	ylabel('I (pA)')
 	hold on	
 	for sCounter=badTraces
 		acqData=newCell.acq{sCounter}.data;
+		acqEndPt=length(acqData)-1;
 		plot([0:acqEndPt]/acqRate, acqData);
 	end
 
 
 %% plot the good traces	
-	a1=subplot(5,   3, [4:6]);
+	a1=subplot(5,   3, [7:12]);
 	title(a1, ['Good acquisitions']);
 	xlabel('time (ms)') 
 	ylabel('I (pA)')
@@ -419,12 +437,13 @@ for cellCounter=cellList
 	
 	for sCounter=goodTraces
 		acqData=newCell.acq{sCounter}.data;
+		acqEndPt=length(acqData)-1;		
 		plot([0:acqEndPt]/acqRate, acqData);
 	end
 	
 
 %%		
-	a2=subplot(5, 3, 7);
+	a2=subplot(5, 4, [17:18]);
 	yyaxis left
 	scatter(newCell.pulseI(goodTraces), newCell.pulseV(goodTraces))
 	set(gca, 'Ylim', [-100 0])
@@ -436,7 +455,7 @@ for cellCounter=cellList
 	ylabel('# AP')
 	xlabel('step (pA)') 
 
-	a3=subplot(5, 3, 8);
+	a3=subplot(5, 4, [19:20]);
 	scatter(newCell.pulseV(goodTraces), newCell.nAP(goodTraces));
 	set(gca, 'Xlim', [-100 0])
 	title(a3, 'vs VOLTAGE')
