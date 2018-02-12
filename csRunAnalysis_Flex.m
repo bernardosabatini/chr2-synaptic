@@ -223,7 +223,7 @@ for cellCounter=cellList
     newCell.extraGain=nan(1, nAcq);
     
    	newCell.traceQC=ones(1, nAcq);
-
+	newCell.currentClamp=zeros(1, nAcq);
 	newCell.restMode=nan(1, nAcq);
     newCell.restMean=nan(1, nAcq);
     newCell.restMax=nan(1, nAcq);
@@ -234,6 +234,7 @@ for cellCounter=cellList
     newCell.stepRs=nan(1, nAcq);
     newCell.stepRm=nan(1, nAcq);
     newCell.stepRt=nan(1, nAcq);
+	
 		
 		
 %% run through the acquisitions and calculate passive parameters
@@ -270,29 +271,36 @@ for cellCounter=cellList
 			acqLen=length(acqData)/acqRate;
 		end
 
-		% define periods that are "baseline" and anylyze them 
-		if checkPulseStart>pulseStart % the RC check comes late
-			notPulse=[SR(1, pulseStart-10) SR(anaEnd+150, checkPulseStart-10)]; 
+		newCell.currentClamp(sCounter)=headerValue('state.phys.settings.currentClamp0', 1);
+		if newCell.currentClamp(sCounter)
+			disp('Skipping trace in current clamp mode');
+			newCell.traceQC(sCounter)=0;
 		else
-			notPulse=[SR(checkPulseEnd+50, pulseStart-10) SR(anaEnd+150, acqLen-1)]; 
-		end
-		
-		newCell.restMode(sCounter)=mode(round(notPulse));
-		newCell.restMean(sCounter)=mean(notPulse);
-		newCell.restMedian(sCounter)=median(notPulse);
-		newCell.restSD(sCounter)=std(notPulse);
-		newCell.restMin(sCounter)=min(notPulse);
-		newCell.restMax(sCounter)=max(notPulse);
 
-		[newCell.stepRm(sCounter), ...
-			newCell.stepRs(sCounter), ...
-			newCell.stepCm(sCounter)] = ...
-			csAnalyzeRC(SR(checkPulseStart,checkPulseEnd)-newCell.restMean(sCounter), ...
-			checkPulseSize, acqRate);
-	    newCell.stepRt(sCounter)=newCell.stepRm(sCounter)+newCell.stepRs(sCounter);
-		
+			% define periods that are "baseline" and anylyze them 
+			if checkPulseStart>pulseStart % the RC check comes late
+				notPulse=[SR(1, pulseStart-10) SR(anaEnd+150, checkPulseStart-10)]; 
+			else
+				notPulse=[SR(checkPulseEnd+50, pulseStart-10) SR(anaEnd+150, acqLen-1)]; 
+			end
+
+			newCell.restMode(sCounter)=mode(round(notPulse));
+			newCell.restMean(sCounter)=mean(notPulse);
+			newCell.restMedian(sCounter)=median(notPulse);
+			newCell.restSD(sCounter)=std(notPulse);
+			newCell.restMin(sCounter)=min(notPulse);
+			newCell.restMax(sCounter)=max(notPulse);
+
+			[newCell.stepRm(sCounter), ...
+				newCell.stepRs(sCounter), ...
+				newCell.stepCm(sCounter)] = ...
+				csAnalyzeRC(SR(checkPulseStart,checkPulseEnd)-newCell.restMean(sCounter), ...
+				checkPulseSize, acqRate);
+			newCell.stepRt(sCounter)=newCell.stepRm(sCounter)+newCell.stepRs(sCounter);
+
+		end
 	end
-			
+	
 	avgRest=median(nonNan(newCell.restMean));
 	avgStepRm=median(nonNan(newCell.stepRm));
 	avgStepRs=median(nonNan(newCell.stepRs));
@@ -307,7 +315,7 @@ for cellCounter=cellList
 %  	hiR=min(avgStepRm*(1+deltaR), 500);
 
  
- 	newCell.traceQC=...
+ 	newCell.traceQC=newCell.traceQC & ...
  		within(newCell.restMean, minRest, maxRest) & ...
  		within(newCell.stepRs, 0, maxRs) & ...
  		within(newCell.stepRm, minRm, maxRm) & ...
@@ -333,31 +341,32 @@ for cellCounter=cellList
  	for sCounter=1:nAcq
 		acqData=newCell.acq{sCounter}.data;	
 		
-		newCell.pscPeakBL(sCounter)=...
-			mean(SR(anaStart-anaWindow-1, anaStart-1));	
-		if signFlip
-			[pk, ~]=max(SR(anaStart, anaEnd));
-		else
-			[pk, ~]=min(SR(anaStart, anaEnd));
-		end			
-		newCell.pscPeak(sCounter)=...
-			pk-newCell.restMedian(sCounter); %-newCell.pscPeakBL(sCounter);
+		if ~newCell.currentClamp(sCounter)
+			newCell.pscPeakBL(sCounter)=...
+				mean(SR(anaStart-anaWindow-1, anaStart-1));	
+			if signFlip
+				[pk, ~]=max(SR(anaStart, anaEnd));
+			else
+				[pk, ~]=min(SR(anaStart, anaEnd));
+			end			
+			newCell.pscPeak(sCounter)=...
+				pk-newCell.restMedian(sCounter); %-newCell.pscPeakBL(sCounter);
 
-		newCell.pscFakePeakBL(sCounter)=...
-			mean(SR(anaStart-anaWindow-1+fakeShift, anaStart-1+fakeShift));	
-		if signFlip
-			[pk, ~]=max(SR(anaStart+fakeShift, anaEnd+fakeShift));
-		else
-			[pk, ~]=min(SR(anaStart+fakeShift, anaEnd+fakeShift));
-		end
-		newCell.pscFakePeak(sCounter)=pk-newCell.restMedian(sCounter); %newCell.pscFakePeakBL(sCounter);
+			newCell.pscFakePeakBL(sCounter)=...
+				mean(SR(anaStart-anaWindow-1+fakeShift, anaStart-1+fakeShift));	
+			if signFlip
+				[pk, ~]=max(SR(anaStart+fakeShift, anaEnd+fakeShift));
+			else
+				[pk, ~]=min(SR(anaStart+fakeShift, anaEnd+fakeShift));
+			end
+			newCell.pscFakePeak(sCounter)=pk-newCell.restMedian(sCounter); %newCell.pscFakePeakBL(sCounter);
 
-		newCell.pscCharge(sCounter)=(chargeAnaEnd-anaStart)*...
-			(mean(SR(anaStart, chargeAnaEnd))-newCell.restMedian(sCounter)); %-newCell.pscPeakBL(sCounter));
-		newCell.pscFakeCharge(sCounter)=(chargeAnaEnd-anaStart)*...
-			(mean(SR(anaStart+fakeShift, chargeAnaEnd+fakeShift))...
-			-newCell.restMedian(sCounter)); %newCell.pscFakePeakBL(sCounter));	
-	
+			newCell.pscCharge(sCounter)=(chargeAnaEnd-anaStart)*...
+				(mean(SR(anaStart, chargeAnaEnd))-newCell.restMedian(sCounter)); %-newCell.pscPeakBL(sCounter));
+			newCell.pscFakeCharge(sCounter)=(chargeAnaEnd-anaStart)*...
+				(mean(SR(anaStart+fakeShift, chargeAnaEnd+fakeShift))...
+				-newCell.restMedian(sCounter)); %newCell.pscFakePeakBL(sCounter));	
+		end	
 	end
 
 
@@ -391,7 +400,7 @@ for cellCounter=cellList
 	newCell.avgData=avgData;
 	
 	if ~isempty(avgData)
-		newCell.avgRestMean=mean(newCell.restMean);
+		newCell.avgRestMean=mean(nonNan(newCell.restMean));
 	
 		[newCell.avgStepRs, ...
 			newCell.avgStepRm, ...
@@ -417,10 +426,12 @@ for cellCounter=cellList
 
 		for sCounter=1:nAcq
 			acqData=newCell.acq{sCounter}.data;
-			newCell.pscPeriAvgPeak(sCounter)=mean(SR(xStart-anaPeakPre, ...
-				xStart+anaPeakPost)) -newCell.restMedian(sCounter); %newCell.pscPeakBL(sCounter);
-			newCell.pscPeriAvgFakePeak(sCounter)=mean(SR(xStartFake-anaPeakPre, ...
-				xStartFake+anaPeakPost)) - newCell.restMedian(sCounter); %newCell.pscFakePeakBL(sCounter);		
+			if ~newCell.currentClamp(sCounter)
+				newCell.pscPeriAvgPeak(sCounter)=mean(SR(xStart-anaPeakPre, ...
+					xStart+anaPeakPost)) -newCell.restMedian(sCounter); %newCell.pscPeakBL(sCounter);
+				newCell.pscPeriAvgFakePeak(sCounter)=mean(SR(xStartFake-anaPeakPre, ...
+					xStartFake+anaPeakPost)) - newCell.restMedian(sCounter); %newCell.pscFakePeakBL(sCounter);		
+			end
 		end
 
 	else
@@ -449,6 +460,7 @@ for cellCounter=cellList
 	hold on	
 	for sCounter=badTraces
 		acqData=newCell.acq{sCounter}.data;
+		acqEndPt=length(acqData)-1;
 		plot([0:acqEndPt]/acqRate, acqData);
 	end
 
@@ -472,6 +484,7 @@ for cellCounter=cellList
 	
 	for sCounter=goodTraces
 		acqData=newCell.acq{sCounter}.data;
+		acqEndPt=length(acqData)-1;
 		plot([0:acqEndPt]/acqRate, acqData);
 	end
 	
