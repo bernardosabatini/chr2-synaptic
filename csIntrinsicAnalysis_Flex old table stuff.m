@@ -44,8 +44,8 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 	end
     
 	% the fields that will go to the csv and xlsx tables at the end
-    newCellFieldsToKeep={'acqNum', 'cyclePosition', 'extraGain', 'restMean', 'pulseI', 'pulseV', 'pulseRm', ...
-		'nAP', 'sagV', 'reboundV', 'reboundAP', 'checkPulseRend', 'checkPulseRpeak', 'checkPulseTau'};
+    newCellFieldsToKeep={'acqNum', 'restMean', 'pulseI', 'pulseV', 'pulseRm', ...
+		'nAP', 'sagV', 'reboundV', 'reboundAP'};
     
 	
 %% set up the variables to process data
@@ -73,7 +73,7 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 	
 	medianFilterSize=1;
 	
-    goodTracesToKeep=20;
+    goodTracesToKeep=10;
     blockLength=goodTracesToKeep+4;
     colOffset=30;
     rowCounter=1;
@@ -94,9 +94,7 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
     csTableOut(outputRowCounter, 1:nCol)=csTableRaw(rowCounter, 1:nCol);
 	
     insertToCell('cycleName', size(csTableRaw,2)+1, 1)
-	if ~firstOnly
-	    insertToCell('cyclePosition', size(csTableRaw,2)+2, 1)
-	end
+    insertToCell('cyclePosition', size(csTableRaw,2)+2, 1)
     insertToCell('good_count', size(csTableRaw,2)+3, 1)
     insertToCell('bad_count', size(csTableRaw,2)+4, 1)
     insertToCell('keep_count', size(csTableRaw,2)+5, 1)
@@ -105,10 +103,8 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
         offset=colOffset+blockLength*(blockCounter-1);
         insertToCell(newCellFieldsToKeep{blockCounter},...
             offset, 1, goodTracesToKeep);
-		if ~firstOnly
-			insertToCell('Avg', offset+goodTracesToKeep, 1);
-			insertToCell('Std', offset+goodTracesToKeep+1, 1);
-		end
+        insertToCell('Avg', offset+goodTracesToKeep, 1);
+        insertToCell('Std', offset+goodTracesToKeep+1, 1);
     end
    
 %% nested function to insert to cell
@@ -139,13 +135,10 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
     end
 
 %% nested function to insert into cell with avg and std
-    function insertToCellWithStats(val, block, row, stopStats)
+    function insertToCellWithStats(val, block, row)
         if nargin<3
             row=rowCounter;
-		end
-		if nargin<4
-			stopStats=0;
-		end
+        end
         
         offset=colOffset+blockLength*(block-1);
         if length(val)>goodTracesToKeep
@@ -153,10 +146,8 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
         end
         
         insertToCell(val, offset, row);
-		if ~stopStats
-			insertToCell(mean(val), offset+goodTracesToKeep, row);
-			insertToCell(std(val), offset+goodTracesToKeep+1, row);
-		end
+        insertToCell(mean(val), offset+goodTracesToKeep, row);
+        insertToCell(std(val), offset+goodTracesToKeep+1, row);
     end
 
 %% nested function to return a subrange of the data 
@@ -255,9 +246,6 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 		newCell.sagV=nan(1, nAcq);
 		newCell.reboundV=nan(1, nAcq);
 		newCell.reboundAP=nan(1,nAcq);
-		newCell.pulseAHP=nan(1,nAcq);
-		newCell.postAP=cell(1,nAcq);
-		newCell.pulseAP=cell(1,nAcq);	
 
 		newCell.checkPulseRend=nan(1,nAcq);
 		newCell.checkPulseRpeak=nan(1,nAcq);
@@ -353,13 +341,9 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 				% We'll set some QC 
 				newCell.traceQC(sCounter)=...
 					within(newCell.restMode(sCounter), minVm, maxVm) & ...
-					within(newCell.restSD(sCounter), 0, maxRestSD);
-				
-				if ~isempty(checkPulseStart) 
-					newCell.traceQC(sCounter)=...
-						newCell.traceQC(sCounter) & ...
-						within(newCell.checkPulseRend(sCounter), minRm, maxRm);
-				end	
+					within(newCell.restSD(sCounter), 0, 3) & ...
+					within(newCell.checkPulseRend(sCounter), minRm, maxRm)...
+				;		
 
 				% ths trace passes QC.  Is it the first only of that pulse type?
 				if newCell.traceQC(sCounter)
@@ -380,15 +364,13 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 			ppp=find(newCell.traceQC);
 			ppp=ppp(1:min(5, length(ppp)));
 			v0=median(newCell.restMode(ppp));
+			r0=median(newCell.checkPulseRend(ppp));
 			newCell.traceQC=...
 				newCell.traceQC & ...
-				within(newCell.restMode, v0-5, v0+5);
-			if ~isempty(checkPulseStart) 
-				r0=median(newCell.checkPulseRend(ppp));
-				newCell.traceQC=...
-					newCell.traceQC & ...
-					within(newCell.checkPulseRend, 0.8*r0, 1.2*r0);		
-			end
+				within(newCell.restMode, v0-5, v0+5) & ...
+				within(newCell.checkPulseRend, 0.8*r0, 1.2*r0)...
+			;		
+
 
 		%% do some summary analysis
 			goodTraces=find(newCell.traceQC);	
@@ -551,67 +533,53 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 			scatter(newCell.pulseI(goodTraces), newCell.pulseRm(goodTraces))
 			ylabel('R (MO)')
 
-			%% Run through the good ones and extract data
 
+			if ~isempty(savePath)
+				saveas(fFig, fullfile(savePath, [newName 'Fig.fig']));
+				print(fullfile(savePath, [newName 'FigPDF']),'-dpdf','-fillpage')
+				save(fullfile(savePath, [newName '.mat']), 'newCell');
+			end	
+
+
+		% Run through the good ones and extract data
 			evalin('base', [newName '_ana=newCell;'])
-			drawnow
-			
+
 			uniquePositions=sort(unique(newCell.cyclePosition));
-
-			if firstOnly % if we only keep the first time through, then put it all on a line
-				outputRowCounter=outputRowCounter+1; % one row per cell
+			for cPos=uniquePositions
+				outputRowCounter=outputRowCounter+1;
 				csTableOut(outputRowCounter, 1:nCol)=csTableRaw(rowCounter, 1:nCol);
-				insertToCell(newCell.cycleName{1}, nCol+1, outputRowCounter)
-				bCount=length(find(newCell.traceQC==0));
-				gCount=length(find(newCell.traceQC==1));
-				keepCount=length(goodTraces);
-				insertToCell(gCount, nCol+3, outputRowCounter)
-				insertToCell(bCount, nCol+4, outputRowCounter)
-				insertToCell(keepCount, nCol+5, outputRowCounter)
-				
+
+				bCount=0;
+				gCount=0;
+				keepCount=0;
+				if ~isempty(badTraces)
+					bCount=length(find(newCell.cyclePosition(badTraces)==cPos));
+				end
+
+				fPos=find(newCell.cyclePosition==cPos);
+				insertToCell(newCell.cycleName{fPos(1)}, size(csTableRaw,2)+1, outputRowCounter)
+				insertToCell(cPos, size(csTableRaw,2)+2, outputRowCounter)
+
 				if ~isempty(goodTraces)
-					for blockCounter=1:length(newCellFieldsToKeep)
-						field=newCellFieldsToKeep{blockCounter};
-						insertToCellWithStats(newCell.(field)(goodTraces), blockCounter, outputRowCounter);
-					end
-				end					
-			else
-				for cPos=uniquePositions
-					outputRowCounter=outputRowCounter+1; % one row person cycle position
-					csTableOut(outputRowCounter, 1:nCol)=csTableRaw(rowCounter, 1:nCol);
+					gElements=goodTraces(newCell.cyclePosition(goodTraces)==cPos);
+					gCount=length(gElements);
+					if ~isempty(gElements)
 
-					bCount=0;
-					gCount=0;
-					keepCount=0;
-					if ~isempty(badTraces)
-						bCount=length(find(newCell.cyclePosition(badTraces)==cPos));
-					end
-
-					fPos=find(newCell.cyclePosition==cPos);
-					insertToCell(newCell.cycleName{fPos(1)}, size(csTableRaw,2)+1, outputRowCounter)
-					insertToCell(cPos, size(csTableRaw,2)+2, outputRowCounter)
-
-					if ~isempty(goodTraces)
-						gElements=goodTraces(newCell.cyclePosition(goodTraces)==cPos);
-						gCount=length(gElements);
-						if ~isempty(gElements)
-
-							for blockCounter=1:length(newCellFieldsToKeep)
-								field=newCellFieldsToKeep{blockCounter};
-								insertToCellWithStats(newCell.(field)(gElements), blockCounter, outputRowCounter);
-							end
+						for blockCounter=1:length(newCellFieldsToKeep)
+							field=newCellFieldsToKeep{blockCounter};
+							insertToCellWithStats(newCell.(field)(gElements), blockCounter, outputRowCounter);
 						end
 					end
-					insertToCell(gCount,...
-								size(csTableRaw,2)+3, outputRowCounter)
-					insertToCell(bCount,...
-								size(csTableRaw,2)+4, outputRowCounter)
-					insertToCell(min(gCount, goodTracesToKeep),...
-								size(csTableRaw,2)+5, outputRowCounter)
 				end
+				insertToCell(gCount,...
+							size(csTableRaw,2)+3, outputRowCounter)
+				insertToCell(bCount,...
+							size(csTableRaw,2)+4, outputRowCounter)
+				insertToCell(min(gCount, goodTracesToKeep),...
+							size(csTableRaw,2)+5, outputRowCounter)
 			end
 
-			%% Do some saving
+
 			nameIndex=find(ismember(nameList, newName));
 			if isempty(nameIndex)
 				nameList{end+1}=newName;
