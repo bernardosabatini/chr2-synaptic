@@ -204,12 +204,67 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 
 %% run through the cells in the list
 
+<<<<<<< Updated upstream
 	for cellCounter=cellList 
 		rowCounter=cellCounter+1; % the first row has headers
 		fullpath=[prepath num2str(csTableRaw{rowCounter, ind.Date}) '/WW_Gil'];
 		fullpathshort=[prepath num2str(csTableRaw{rowCounter, ind.Date})];
 		sStart=extractNum(csTableRaw{rowCounter, ind.SweepStart});
 		sEnd=extractNum(csTableRaw{rowCounter, ind.SweepEnd});
+=======
+for cellCounter=cellList 
+    rowCounter=cellCounter+1; % the first row has headers
+    fullpath=[prepath num2str(csTableRaw{rowCounter, ind.Date}) '/WW_Gil'];
+    fullpathshort=[prepath num2str(csTableRaw{rowCounter, ind.Date})];
+    sStart=extractNum(csTableRaw{rowCounter, ind.SweepStart});
+    sEnd=extractNum(csTableRaw{rowCounter, ind.SweepEnd});
+    
+    nAcq=sEnd-sStart+1;
+	if isnan(nAcq)
+		nAcq=0;
+	end
+    
+    %% initialize the data object
+	for label=fieldnames(ind)'
+		newCell.(label{1})=csTableRaw{rowCounter, ind.(label{1})};
+	end
+	
+	newCell.QC=1; % assume passes QC
+	newCell.acqRate=0;
+	newCell.firstOnly=firstOnly;
+	
+	newCell.acq=cell(1,nAcq); % store the full object for that acq sweep
+    
+    newCell.acqNum=nan(1, nAcq);
+    newCell.cycleName=cell(1, nAcq);
+    newCell.cyclePosition=nan(1, nAcq);
+    newCell.pulsePattern=nan(1, nAcq);
+    newCell.extraGain=nan(1, nAcq);
+
+	if usePulseListInExcel
+		newCell.pulseList=str2num(newCell.CurrentPulse);		
+	else
+		newCell.pulseList=pulseList.(['p' num2str(newCell.CurrentPulseID)]);
+	end
+
+    newCell.pulseListFirst=nan(1, length(newCell.pulseList));
+	
+   	newCell.traceQC=ones(1, nAcq);
+
+	newCell.restMode=nan(1, nAcq);
+    newCell.restMean=nan(1, nAcq);
+    newCell.restMax=nan(1, nAcq);
+    newCell.restMin=nan(1, nAcq);
+	newCell.restSD=nan(1, nAcq);
+
+	newCell.pulseRm=nan(1, nAcq);
+    newCell.pulseV=nan(1, nAcq);
+    newCell.nAP=nan(1, nAcq);
+    newCell.traceQC=ones(1, nAcq);
+	newCell.sagV=nan(1, nAcq);
+	newCell.reboundV=nan(1, nAcq);
+	newCell.reboundAP=nan(1,nAcq);
+>>>>>>> Stashed changes
 
 		nAcq=sEnd-sStart+1;
 		if isnan(nAcq)
