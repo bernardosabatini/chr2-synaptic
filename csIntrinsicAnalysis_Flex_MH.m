@@ -52,22 +52,22 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 	pulseList.p1=[-100 -75 -50 -25 10 20 30 40 50 60 70 80 90 100 150 200 250];
 	pulseList.p2=[-100 0 20 40 60 80 100 150 200 250 300];
 
-	pulseStart=1500;
-	pulseEnd=2500;
+	pulseStart=700;
+	pulseEnd=1700;
 
 	% where the RC check occurs
 	checkPulseSize=-50; % pA we are in current clamp
-	checkPulseStart=200;
-	checkPulseEnd=500;
-	usePulseListInExcel=0;
+	checkPulseStart=100;
+	checkPulseEnd=200;
+	usePulseListInExcel=1;
 
 	% values for QC inclusion of individual sweeps
-	maxRestSD=5;
- 	minRm=50;
+	maxRestSD=Inf;
+ 	minRm=10;
  	maxRm=1000;
 	
-	maxVm=-50;
-	minVm=-90;
+	maxVm=Inf;
+	minVm=-Inf;
 	
 	firstOnly=1;
 	
@@ -204,13 +204,59 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 
 %% run through the cells in the list
 
-	for cellCounter=cellList 
-		rowCounter=cellCounter+1; % the first row has headers
-		fullpath=[prepath num2str(csTableRaw{rowCounter, ind.Date}) '/WW_Gil'];
-		fullpathshort=[prepath num2str(csTableRaw{rowCounter, ind.Date})];
-		sStart=extractNum(csTableRaw{rowCounter, ind.SweepStart});
-		sEnd=extractNum(csTableRaw{rowCounter, ind.SweepEnd});
 
+for cellCounter=cellList 
+    rowCounter=cellCounter+1; % the first row has headers
+    fullpath=[prepath '20' num2str(csTableRaw{rowCounter, ind.Date}) '_ms'];
+    fullpathshort=[prepath num2str(csTableRaw{rowCounter, ind.Date})];
+    sStart=extractNum(csTableRaw{rowCounter, ind.SweepStart});
+    sEnd=extractNum(csTableRaw{rowCounter, ind.SweepEnd});
+    
+    nAcq=sEnd-sStart+1;
+	if isnan(nAcq)
+		nAcq=0;
+	end
+    
+    %% initialize the data object
+	for label=fieldnames(ind)'
+		newCell.(label{1})=csTableRaw{rowCounter, ind.(label{1})};
+	end
+	
+	newCell.QC=1; % assume passes QC
+	newCell.acqRate=0;
+	newCell.firstOnly=firstOnly;
+	
+	newCell.acq=cell(1,nAcq); % store the full object for that acq sweep
+    
+    newCell.acqNum=nan(1, nAcq);
+    newCell.cycleName=cell(1, nAcq);
+    newCell.cyclePosition=nan(1, nAcq);
+    newCell.pulsePattern=nan(1, nAcq);
+    newCell.extraGain=nan(1, nAcq);
+
+	if usePulseListInExcel
+		newCell.pulseList=str2num(newCell.CurrentPulse);		
+	else
+		newCell.pulseList=pulseList.(['p' num2str(newCell.CurrentPulseID)]);
+	end
+
+    newCell.pulseListFirst=nan(1, length(newCell.pulseList));
+	
+   	newCell.traceQC=ones(1, nAcq);
+
+	newCell.restMode=nan(1, nAcq);
+    newCell.restMean=nan(1, nAcq);
+    newCell.restMax=nan(1, nAcq);
+    newCell.restMin=nan(1, nAcq);
+	newCell.restSD=nan(1, nAcq);
+
+	newCell.pulseRm=nan(1, nAcq);
+    newCell.pulseV=nan(1, nAcq);
+    newCell.nAP=nan(1, nAcq);
+    newCell.traceQC=ones(1, nAcq);
+	newCell.sagV=nan(1, nAcq);
+	newCell.reboundV=nan(1, nAcq);
+	newCell.reboundAP=nan(1,nAcq);
 
 		nAcq=sEnd-sStart+1;
 		if isnan(nAcq)
@@ -390,6 +436,11 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 					newCell.traceQC & ...
 					within(newCell.checkPulseRend, 0.8*r0, 1.2*r0);		
 			end
+			
+			
+			%% ~~~~~~~~  WARNING - FORCES all traces as good
+			 newCell.traceQC=ones(1, nAcq);
+
 
 		%% do some summary analysis
 			goodTraces=find(newCell.traceQC);	
@@ -444,7 +495,6 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 				end
 				newCell.pulseAHP(sCounter)=min(SR(pulseEnd+1, floor(length(acqData)/acqRate)))-...
 					newCell.restMean(sCounter);
-
 			end
 
 			newCell.checkPulseRpeakMean=mean(newCell.checkPulseRpeak(goodTraces));

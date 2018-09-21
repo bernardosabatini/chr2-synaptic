@@ -1,7 +1,8 @@
-function [ output_args ] = csRunAnalysis_IntraPF( cellList )
+function [ output_args ] = csRunAnalysis_RevCTXPF( cellList )
 %UNTITLED Summary of this function goes here
 %   Detailed explanation goes here
 
 	csRunAnalysis_Flex(cellList, ...
 		'pulseStart', 1000,...
+		'maxRestSD', 10,...
 		'maxRs', 60);
