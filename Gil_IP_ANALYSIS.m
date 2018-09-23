@@ -46,7 +46,10 @@ for counter=1:length(csAllCells)
 % 					ff1=ff(1);
 % 				end
 			end
-			if ~isempty(ff1) && ~isnan(newCell.pulseV(ff1))
+			if ~isempty(ff1) && ~isnan(newCell.pulseV(ff1)) && ...
+				(newCell.restMean(ff1)<-50) && (newCell.restSD(ff1)<5)...
+				&& (newCell.checkPulseRpeak(ff1)>100)
+			
 				avgV(1, bCounter)=avgV(1, bCounter)+newCell.pulseV(ff1);
 				avgI(1, bCounter)=avgI(1, bCounter)+newCell.pulseI(ff1);
 				avgA(1, bCounter)=avgA(1, bCounter)+newCell.nAP(ff1);

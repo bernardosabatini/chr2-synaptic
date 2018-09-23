@@ -26,9 +26,7 @@ allCounter=0;
 for counter=1:length(csAllCells)
 	newCell=csAllCells(counter);
 	disp([newCell.mouseID ' ' num2str(newCell.cellID)])
-	aps=find(isnumeric(newCell.nAP) & (newCell.nAP>0) ...
-		& (newCell.restMean<-50) & (newCell.restSD<5)...
-		& (newCell.checkPulseRpeak>100));
+	aps=find(isnumeric(newCell.nAP) & newCell.nAP>0);
 	
 	if ~isempty(aps) && ~isempty(newCell.Injection)
 		aps=aps(1);
