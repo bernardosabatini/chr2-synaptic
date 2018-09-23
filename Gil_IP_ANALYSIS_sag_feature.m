@@ -26,7 +26,9 @@ for counter=1:length(csAllCells)
 	
 	if ~isempty(aps) && ~isempty(newCell.Injection)
 		aps=aps(1);
-		newCell.restSD(aps)
+		
+		zone=getZone(newCell);
+		
 		allCounter.all=allCounter.all+1;
 		if isempty(avgTrace.sag.all)
 			avgTrace.sag.all=newCell.acq{aps}.data;
@@ -35,16 +37,16 @@ for counter=1:length(csAllCells)
 				avgTrace.sag.all+newCell.acq{aps}.data;
 		end
 		
-		allCounter.(newCell.Injection)=...
-			allCounter.(newCell.Injection)+1;
-		if isempty(avgTrace.sag.(newCell.Injection))
-			avgTrace.sag.(newCell.Injection)=newCell.acq{aps}.data;
+		allCounter.(zone)=...
+			allCounter.(zone)+1;
+		if isempty(avgTrace.sag.(zone))
+			avgTrace.sag.(zone)=newCell.acq{aps}.data;
 		else
-			avgTrace.sag.(newCell.Injection)=...
-				avgTrace.sag.(newCell.Injection)+newCell.acq{aps}.data;
+			avgTrace.sag.(zone)=...
+				avgTrace.sag.(zone)+newCell.acq{aps}.data;
 		end
 		
-		eval(['figure(' newCell.Injection ')']);
+		eval(['figure(' zone ')']);
 		plot(newCell.acq{aps}.data);
 	end
 end

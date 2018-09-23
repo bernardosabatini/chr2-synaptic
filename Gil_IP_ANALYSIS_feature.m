@@ -34,6 +34,8 @@ for counter=1:length(csAllCells)
 		aps=aps(1);
 		allFields=fieldnames(newCell.pulseAP{aps});
 		
+		zone=getZone(newCell);
+		
 		if isempty(avgTrace.all)
 			avgTrace.all=newCell.acq{aps}.data;
 		else
@@ -41,14 +43,14 @@ for counter=1:length(csAllCells)
 				avgTrace.all+newCell.acq{aps}.data;
 		end
 		
-		if isempty(avgTrace.(newCell.Injection))
-			avgTrace.(newCell.Injection)=newCell.acq{aps}.data;
+		if isempty(avgTrace.(zone))
+			avgTrace.(zone)=newCell.acq{aps}.data;
 		else
-			avgTrace.(newCell.Injection)=...
-				avgTrace.(newCell.Injection)+newCell.acq{aps}.data;
+			avgTrace.(zone)=...
+				avgTrace.(zone)+newCell.acq{aps}.data;
 		end
 		
-		eval(['figure(' newCell.Injection ')']);
+		eval(['figure(' zone ')']);
 		plot(newCell.acq{aps}.data);
 		
 		for fc=1:length(allFields)
@@ -60,10 +62,10 @@ for counter=1:length(csAllCells)
 				apResults.all.(fns)=value;
 			end
 			
-			if isfield(apResults.(newCell.Injection), fns)
-				apResults.(newCell.Injection).(fns)(end+1)=value;
+			if isfield(apResults.(zone), fns)
+				apResults.(zone).(fns)(end+1)=value;
 			else
-				apResults.(newCell.Injection).(fns)=value;
+				apResults.(zone).(fns)=value;
 			end
 		end
 		
@@ -79,10 +81,10 @@ for counter=1:length(csAllCells)
 				apResults.all.(fns)=value;
 			end
 			
-			if isfield(apResults.(newCell.Injection), fns)
-				apResults.(newCell.Injection).(fns)(end+1)=value;
+			if isfield(apResults.(zone), fns)
+				apResults.(zone).(fns)(end+1)=value;
 			else
-				apResults.(newCell.Injection).(fns)=value;
+				apResults.(zone).(fns)=value;
 			end
 		end
 	end

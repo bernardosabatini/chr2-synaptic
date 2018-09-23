@@ -32,7 +32,6 @@ for counter=1:length(csAllCells)
 	disp([newCell.mouseID ' ' newCell.cellID])
 	aps=newCell.nAP;
 	aps(isnan(aps))=0;
-	newCell.pulseI
 	
 	if sum(aps)>10
 		for bCounter=1:pCount
@@ -54,13 +53,17 @@ for counter=1:length(csAllCells)
 				avgI(1, bCounter)=avgI(1, bCounter)+newCell.pulseI(ff1);
 				avgA(1, bCounter)=avgA(1, bCounter)+newCell.nAP(ff1);
 				avgN(1, bCounter)=avgN(1, bCounter)+1;
-				if newCell.Injection(1)=='M'
+
+				zone=getZone(newCell);
+				
+				if zone=='M'
 					ind=2;
-				elseif newCell.Injection(1)=='C'
+				elseif zone=='C'
 					ind=3;
-				elseif newCell.Injection(1)=='L'
+				elseif zone=='L'
 					ind=4;
 				end
+				
 				avgV(ind, bCounter)=avgV(ind, bCounter)+newCell.pulseV(ff1);
 				avgI(ind, bCounter)=avgI(ind, bCounter)+newCell.pulseI(ff1);
 				avgA(ind, bCounter)=avgA(ind, bCounter)+newCell.nAP(ff1);
