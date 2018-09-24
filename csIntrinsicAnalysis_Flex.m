@@ -62,17 +62,27 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 	usePulseListInExcel=0;
 
 	% values for QC inclusion of individual sweeps
-	maxRestSD=5;
- 	minRm=50;
- 	maxRm=1000;
+	maxRestSD=5; % max SD of the resting voltage to pass QC
+ 	minRm=50; % min Rm to pass QC
+ 	maxRm=1000; % max Rm to pass QC
 	
-	maxVm=-50;
-	minVm=-90;
+	maxVm=-50; % max Vm for inclusion and to pass QC
+	minVm=-90; % min Vm for inclusion and to pass QC
 	
-	firstOnly=1;
+	initialDeltaVmSweeps=5; % How many of the first sweeps should we use to 
+							% determine the starting Vm
+	maxDeltaVm=5; % How far can the Vm move from the above value and still be included
+	maxFractionalDeltaRm=0.2; % What fractional change in the Rm will be accept
 	
-	medianFilterSize=1;
+	minFractionGoodToKeepCell=0.5;	% What fraction of the traces need to pass QC for
+									% the cell to pass QC
 	
+	firstOnly=1; % Save only the first time through a pulse pattern or keep them all
+	
+	medianFilterSize=1; % filter the data?
+	
+	% 20 is the assumed maximum number of traces - used to format the
+	% output spreadsheet only
     goodTracesToKeep=20;
     blockLength=goodTracesToKeep+4;
     colOffset=30;
@@ -223,7 +233,7 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 			newCell.(label{1})=csTableRaw{rowCounter, ind.(label{1})};
 		end
 
-		newCell.QC=1; % assume passes QC
+		newCell.QC=1; % assume cell passes QC
 		newCell.acqRate=0;
 		newCell.firstOnly=firstOnly;
 		newName=[newCell.mouseID '_' num2str(newCell.cellID)];
@@ -240,8 +250,6 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 			newCell.pulseList=pulseList.(['p' num2str(newCell.CurrentPulseID)]);
 		end
 		newCell.pulseListFirst=nan(1, length(newCell.pulseList));
-
-		newCell.traceQC=ones(1, nAcq);
 
 		newCell.restMode=nan(1, nAcq);
 		newCell.restMean=nan(1, nAcq);
@@ -299,7 +307,10 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 				else
 					a.(['AD0_' num2str(acqNum)]).data=a.(['AD0_' num2str(acqNum)]).data;
 				end
-
+				
+				a.(['AD0_' num2str(acqNum)]).headerString= ...
+					a.(['AD0_' num2str(acqNum)]).UserData.headerString;
+				
 				newCell.acq{sCounter}=a.(['AD0_' num2str(acqNum)]);
 
 				newCell.acqNum(sCounter)=acqNum;
@@ -376,19 +387,22 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 			disp(['  NO DATA FOR ' newName]);
 		else
 
-			% We'll set some QC 
-			% if volage more than 5 mV from that of the first sweep, reject
+			% We'll do some more QC 
+			% if volage more than maxDeltaVm mV from that of the first sweep, reject
 			ppp=find(newCell.traceQC);
-			ppp=ppp(1:min(5, length(ppp)));
+			ppp=ppp(1:min(initialDeltaVmSweeps, length(ppp)));
 			v0=median(newCell.restMode(ppp));
+			
 			newCell.traceQC=...
 				newCell.traceQC & ...
-				within(newCell.restMode, v0-5, v0+5);
+				within(newCell.restMode, v0-maxDeltaVm, v0+maxDeltaVm);
 			if ~isempty(checkPulseStart) 
 				r0=median(newCell.checkPulseRend(ppp));
 				newCell.traceQC=...
 					newCell.traceQC & ...
-					within(newCell.checkPulseRend, 0.8*r0, 1.2*r0);		
+					within(newCell.checkPulseRend, ...
+						(1-maxFractionalDeltaRm)*r0, ...
+						(1+maxFractionalDeltaRm)*r0);		
 			end
 
 		%% do some summary analysis
@@ -478,10 +492,10 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 			ylabel('I (pA)')
 			hold on
 
-			denom=nAcq;	
+			denom=length(acqToAna);	
 			nGood=length(goodTraces);
 
-			if nGood>denom/2
+			if nGood>denom*minFractionGoodToKeepCell
 				newCell.QC=1;
 			else
 				newCell.QC=0;
