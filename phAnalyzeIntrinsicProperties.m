@@ -1,6 +1,5 @@
-function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
-%csRunAnalysis_Flex Runs the EPSC analysis 
-%	with flexible way to override variables
+function [ output_args ] = phAnalyzeIntrinsicProperties( cellList, varargin )
+%phAnalyzeIntrinsicProperties 
 
 %% basic initialization and gui stuff
 	% where is the data stored
@@ -52,11 +51,11 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 
 	% this is a very important selection that determines how the current
 	% pulse amplitude will be determined for each trace
-	pulseAmplitudeMode=1; 
+	pulseAmplitudeMode=3; 
 	% 1 - use the values stored in pulseListbyCyclePosition and index them by the cycle
 	% position. e.g. cyclePostition=2 means take the second value in the
 	% list
-	% 2 - use the values in the excel shee. THis option will take the list 
+	% 2 - use the values in the excel sheet. THis option will take the list 
 	% from the "CurrentPulse" column of the excel sheet and index by the
 	% cycle position.  i.e. the column can have "-100, 0, 50, 100" in it 
 	% cycle posiiton=3 will retreive 50
@@ -68,16 +67,23 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 	% preferred method but it was not implemented correctly in some old
 	% data
 	
-	usePulseListInExcel=0;
-
 	pulseListByCyclePosition=[-100 -75 -50 -25 10 20 30 40 50 60 70 80 90 100 150 200 250];
-	pulseListByPatternNumber=[[40 -100]; ...
-		[41 -75];
-		[42 -50];
-		[43 0]; 
-		[44 10];
+	pulseListByPatternNumber=[...
+		[50 -100]; ...
+		[51 -75];
+		[52 -50];
+		[53 -25]; 
+		[54 -10];
+		[55 10];
+		[56 -20];
+		[57 30];
+		[58 40];
 		];
 	% pulseListbyPosition=[-100 0 20 40 60 80 100 150 200 250 300];
+
+	% Flag to determine if only the first time occurence of a pulse amplitude
+	% should be used or if all repeated occurences should be processed 
+	firstOnly=0; 
 
 	pulseStart=1500;
 	pulseEnd=2500;
@@ -104,9 +110,7 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 	
 	minFractionGoodToKeepCell=0.5;	% What fraction of the traces need to pass QC for
 									% the cell to pass QC
-	
-	firstOnly=1; % Save only the first time through a pulse pattern or keep them all
-	
+		
 	medianFilterSize=1; % filter the data?
 	
 %% Set up some parameters to format the output .CSV file and Overwrite the 
@@ -274,12 +278,35 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 		newCell.cyclePosition=nan(1, nAcq);
 		newCell.pulsePattern=nan(1, nAcq);
 		newCell.extraGain=nan(1, nAcq);
-		if usePulseListInExcel
-			newCell.pulseList=str2num(newCell.CurrentPulse);		
-		else
-			newCell.pulseList=pulseListByCyclePosition.(['p' num2str(newCell.CurrentPulseID)]);
+		switch pulseAmplitudeMode
+			case 1
+				newCell.pulseList=pulseListByCyclePosition;
+			case 2
+				if isempty(newCell.CurrentPulse)
+					disp('**** No pulse amplitude list found in spreadsheet')
+					disp('   make sure there is a column titled CurrentPulse')
+					error('can not process amplitude current pulses');
+				else
+					newCell.pulseList=str2num(newCell.CurrentPulse);
+					if isempty(newCell.pulseList)
+						newCell.pulseList=str2num(newCell.CurrentPulse(1:end-1));
+					end
+					if isempty(newCell.pulseList)
+						disp(newCell.CurrentPulse);
+						error('can not process amplitude current pulses');
+					end
+
+				end
+			case 3
+				newCell.pulseList=[]; % look it up dynamically below		
+			case 4
+				newCell.pulseList=[]; % look it up dynamically below		
+			otherwise
+				error(['pulseAmplitudeMode = ' num2str(pulseAmplitudeMode) ...
+					' which is an unknown mode']);
 		end
-		newCell.pulseListFirst=nan(1, length(newCell.pulseList));
+			
+		newCell.pulseListFirst=[];
 
 		newCell.restMode=nan(1, nAcq);
 		newCell.restMean=nan(1, nAcq);
@@ -349,12 +376,38 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 				newCell.cyclePosition(sCounter)=headerValue('state.cycle.currentCyclePosition', 1);
 				newCell.pulsePattern(sCounter)=headerValue('state.cycle.pulseToUse0', 1);
 				newCell.extraGain(sCounter)=headerValue('state.phys.settings.extraGain0', 1);
-
-				if newCell.cyclePosition(sCounter)<=length(newCell.pulseList)
-					deltaI=newCell.pulseList(newCell.cyclePosition(sCounter))...
-						*newCell.extraGain(sCounter);
-				else
-					disp([sFile ' ' num2str(acqNum) ' error in cycle']);
+				
+				if (pulseAmplitudeMode==1) || (pulseAmplitudeMode==2) % value is stored in pulse list by now
+					if newCell.cyclePosition(sCounter)<=length(newCell.pulseList)
+						deltaI=newCell.pulseList(newCell.cyclePosition(sCounter))...
+							*newCell.extraGain(sCounter);
+					else
+						disp(['****' sFile ' ' num2str(acqNum) ' error in cycle']);
+						disp(['   cycle position is beyond the entried in the current pulse list']);
+						disp(['   Setting pulse amplitude to 0']);
+						deltaI=0;
+					end
+				elseif (pulseAmplitudeMode==3) % look it up by pulse pattern in the list set by user above
+					ff=find(pulseListByPatternNumber(:,1)==newCell.pulsePattern(sCounter));
+					if isempty(ff)
+						disp(['****' sFile ' ' num2str(acqNum) ' error in cycle']);
+						disp(['   pulse pattern #' num2str(newCell.pulsePattern(sCounter)) ...
+							' is not in pulseListByPatternNumber'])
+						disp(['   Setting pulse amplitude to 0']);
+						deltaI=0;						
+					else
+						if length(ff)>1
+							disp(['****' sFile ' ' num2str(acqNum) ' error in cycle']);
+							disp(['   pulse pattern #' num2str(newCell.pulsePattern(sCounter)) ...
+								' has multiple entreis in pulseListByPatternNumber'])
+							disp(['   Setting pulse amplitude to the first entry']);
+						end
+						deltaI=pulseListByPatternNumber(ff(1), 2)...
+							*newCell.extraGain(sCounter);
+					end
+				elseif (pulseAmplitudeMode==4)
+					disp(['**** pulseAmplitudeMode 4 is not implemented']);
+					disp(['   Setting pulse amplitude to 0']);
 					deltaI=0;
 				end
 				newCell.pulseI(sCounter)=deltaI;
@@ -403,11 +456,14 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 						within(newCell.checkPulseRend(sCounter), minRm, maxRm);
 				end	
 
-				% ths trace passes QC.  Is it the first only of that pulse type?
+				% ths trace passes QC.  Is it the first one of that pulse amplitude?
 				if newCell.traceQC(sCounter)
-					ff=find(newCell.pulseList==newCell.pulseI(sCounter));
-					if isnan(newCell.pulseListFirst(ff))
-						newCell.pulseListFirst(ff)=sCounter;
+					if isempty(newCell.pulseListFirst)
+						newCell.pulseListFirst=[newCell.pulseI(sCounter) sCounter];
+					else						
+						if isempty(find(newCell.pulseListFirst(:,1)==newCell.pulseI(sCounter),1))
+							newCell.pulseListFirst(end+1, :)=[newCell.pulseI(sCounter) sCounter];
+						end
 					end
 				end
 			end
@@ -446,7 +502,11 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 			allAcq=find(~isnan(newCell.restMedian));
 
 			if firstOnly
-				acqToAna=sort(newCell.pulseListFirst(~isnan(newCell.pulseListFirst)));
+				if isempty(newCell.pulseListFirst)
+					acqToAna=[];
+				else
+					acqToAna=sort(newCell.pulseListFirst(:,2))';
+				end
 				goodTraces=intersect(acqToAna, goodTraces);
 				badTraces=setdiff(allAcq, goodTraces);
 			else
@@ -531,12 +591,13 @@ function [ output_args ] = csIntrinsicAnalysis_Flex( cellList, varargin )
 				newCell.QC=0;
 			end
 
-			for sCounter=goodTraces
-				acqData=newCell.acq{sCounter}.data;
-				acqEndPt=length(acqData)-1;		
-				plot([0:acqEndPt]/acqRate, acqData);
+			if ~isempty(goodTraces)
+				for sCounter=goodTraces
+					acqData=newCell.acq{sCounter}.data;
+					acqEndPt=length(acqData)-1;		
+					plot([0:acqEndPt]/acqRate, acqData);
+				end
 			end
-
 
 		%%	resistances
 			% plot cell params
